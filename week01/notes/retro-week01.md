@@ -12,7 +12,7 @@
 -trade-off kararlarını yardım almadan veremiyorum.
 
 ## Hangi hatam bana en çok şey öğretti?
--
+-cut' un kolonları kaydırması
 
 ## Portföye ne eklendi?
 - dev-setup — https://github.com/KumruCelik/dev-setup
