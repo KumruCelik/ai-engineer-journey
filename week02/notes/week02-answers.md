@@ -36,3 +36,36 @@ istek alan bir serviste bu fark, gecikmenin kendisi olur.
 **Ne zaman `deque` kullanmam:** Ortadan indeksleme yapıyorsam. `lst[5000]`
 listede sabit sürede, deque'te doğrusal. Kuyruk davranışı yoksa `deque`
 seçmenin bir faydası yok.
+
+
+
+## 2. Bir decorator'da `functools.wraps` kullanmazsam ne kaybederim?
+
+Decorator aslında fonksiyonu değiştirmiyor, **yerine başka bir fonksiyon koyuyor**.
+`@sayac` yazmak `selam = sayac(selam)` demek; artık `selam` adı içerideki
+`wrapper`'ı gösteriyor. `wraps` olmazsa orijinal fonksiyonun kimliği kayboluyor.
+
+Kendi makinemde ölçtüm:
+
+| | `__name__` | `__doc__` | imza |
+|---|---|---|---|
+| wraps'sız | `wrapper` | `None` | `(*args, **kwargs)` |
+| wraps'lı | `selam_b` | korunmuş | `(ad: str) -> str` |
+
+Somut kayıplar:
+
+- `help(f)` işe yaramaz, docstring gitmiştir
+- Hata izlerinde gerçek fonksiyon adı yerine `wrapper` görünür — hangi
+  fonksiyonun patladığını bulmak zorlaşır
+- `inspect.signature` ile imza okuyan araçlar çalışmaz. FastAPI rotaların
+  parametrelerini, pytest fixture'ları, typer/click gibi CLI kütüphaneleri
+  hep imzaya bakar; dekore edilmiş fonksiyon `(*args, **kwargs)` görünürse
+  bu araçlar bozulur.
+- IDE otomatik tamamlaması ve tip denetimi zayıflar
+
+`wraps` bunları `__name__`, `__doc__`, `__module__`, `__qualname__`,
+`__annotations__` ve `__wrapped__` alanlarını kopyalayarak çözüyor.
+`__wrapped__` sayesinde orijinal fonksiyona da erişilebiliyor.
+
+Kural: **her decorator'da `@wraps(f)` yaz.** Maliyeti bir satır, unutmanın
+maliyeti hata ayıklarken kaybedilen saatler.
