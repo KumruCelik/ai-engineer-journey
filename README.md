@@ -20,7 +20,7 @@ weekNN/
 | Hafta | Bölüm | Çıktı | Durum |
 |---|---|---|---|
 | 1 | Ortam, araçlar, mühendislik hijyeni | [dev-setup](https://github.com/KumruCelik/dev-setup) · [fastapi-docker](https://github.com/KumruCelik/fastapi-docker) | ✅ |
-| 2–4 | Python & yazılım mühendisliği disiplini |(https://github.com/KumruCelik/py-core) , mini-etl | ⬜ |
+| 2–4 | Python & yazılım mühendisliği disiplini |py-core, mini-etl | ⬜ |
 | 4–6 | SQL & veri modelleme | sql-mastery | ⬜ |
 | 6–9 | Lineer cebir | linalg-from-scratch | ⬜ |
 | 9–11 | Kalkülüs & optimizasyon | microautograd | ⬜ |
