@@ -1,7 +1,15 @@
+# veri — indirilebilir olan versiyonlanmaz
 *.csv
 data/*.csv
+# taslaklar
+scratch/
+_ham-gecmis*
+# sırlar
 .env
+# python
 __pycache__/
 .venv/
-_*
-_*
+.coverage
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
