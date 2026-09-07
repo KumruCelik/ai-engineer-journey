@@ -89,6 +89,20 @@ Veri mühendisliğinde 4. maddenin cevabı 2. maddeden daha sık doğrudur.
 "Paralelleştireyim" refleksinden önce "bu işi zaten yapan, GIL'i bırakan bir
 kütüphane var mı?" diye sormak gerekiyor.
 
+## Üç yaygın yanlış
+
+**"GIL yüzünden Python'da iş parçacığı işe yaramaz."** Ölçümüm bunun tersini
+gösteriyor: I/O işinde iş parçacıkları tam dört kat kazandırdı. GIL yalnızca
+bayt kodu çalıştırırken tutulur, beklerken bırakılır.
+
+**"`multiprocessing` GIL'i kapatır."** Kapatmaz. Her sürecin **kendi**
+yorumlayıcısı ve kendi GIL'i vardır. Kazanç, kilidi kaldırmaktan değil, dört
+ayrı kilit kullanmaktan gelir. Bedeli de buradadır: süreçler bellek paylaşmaz.
+
+**"GIL, Python dilinin bir özelliğidir."** Değil — CPython'un uygulama
+detayıdır. Jython ve IronPython'da GIL yoktur. Dil belirtiminde böyle bir kilit
+tanımlanmaz.
+
 ## Değişen tablo
 
 Python 3.13 ile GIL'siz bir derleme (**free-threaded build**, PEP 703) deneysel
