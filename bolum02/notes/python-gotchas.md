@@ -498,3 +498,146 @@ sure = time.time() - baslangic     # negatif olabilir
 **Kural:** Süre ölçümünde her zaman `perf_counter`. Tek başına anlamsızdır, iki ölçümün **farkı** anlamlıdır.
 
 ---
+
+## 31. `dict.fromkeys` değeri kopyalamaz
+
+```python
+d = dict.fromkeys(["a", "b"], [])
+d["a"].append(1)
+```
+
+**Gerçek:** `d` → `{"a": [1], "b": [1]}`. İkisi de değişti.
+**Neden:** `fromkeys` verilen değeri her anahtar için **kopyalamaz**; hepsi aynı nesneye işaret eder. 1 ve 2 numaralı tuzakların üçüncü yüzü.
+**Kural:** `dict.fromkeys`'i yalnızca **değişmez** değerlerle kullan (`None`, `0`, `""`). Değişebilir değer için sözlük üreteci yaz: `{a: [] for a in anahtarlar}`.
+
+---
+
+## 32. `bool("False")` → `True`
+
+```python
+bool("False")   # True
+bool("0")       # True
+bool("")        # False
+```
+
+**Gerçek:** Boş olmayan her metin doğrudur. `"False"` da, `"0"` da, `"hayir"` da.
+**Neden:** `bool(str)` içeriğe değil **uzunluğa** bakar.
+**Kural:** CSV/JSON'dan gelen metni `bool`'a çevirirken asla `bool` fonksiyonunu kullanma. Tanıdığın değerleri açıkça listele, tanımadığında **hata ver**:
+```python
+if kucuk in {"1", "true", "evet"}: return True
+if kucuk in {"0", "false", "hayir"}: return False
+raise ValueError(...)
+```
+
+---
+
+## 33. `with sqlite3.connect(...)` bağlantıyı kapatmaz
+
+```python
+with sqlite3.connect(yol) as baglanti:
+    ...
+# baglanti HALA acik
+```
+
+**Gerçek:** Blok bitince işlem onaylanır (commit) ama bağlantı kapanmaz.
+**Neden:** `sqlite3`'te bağlantı nesnesinin `__exit__` metodu **işlem** yönetir, kaynak değil. Çoğu kütüphanenin aksine.
+**Kural:** `try/finally` ile açıkça `close()` çağır, ya da `contextlib.closing` kullan. Uzun süren programlarda açık bağlantılar birikir.
+
+---
+
+## 34. `yaml.load` kod çalıştırabilir
+
+```yaml
+!!python/object/apply:os.system ["rm -rf /"]
+```
+
+**Gerçek:** `yaml.load()` bu etiketi görünce komutu **çalıştırır**.
+**Neden:** YAML özel etiketlerle rastgele Python nesnesi oluşturabilir; `yaml.load` bunu varsayılan olarak destekler.
+**Kural:** Her zaman `yaml.safe_load`. Genel ilke: **yapılandırma dosyası veridir, kod değil.** `eval`, `exec`, `pickle` ve `yaml.load` yapılandırma okurken kullanılmaz.
+
+---
+
+## 35. Tip ipuçları tanım anında değerlendirilir
+
+```python
+def f(g: Callable[[str], int] = varsayilan) -> None: ...
+# NameError: name 'Callable' is not defined
+```
+
+**Gerçek:** Hata fonksiyon **çağrılırken** değil, dosya **import edilirken** çıkıyor. Ve o dosyayı kullanan her şey anında düşüyor.
+**Neden:** Python normalde imzadaki ifadeleri tanım anında hesaplar. Tip ipucu bir "yorum" değil, gerçek bir ifade.
+**Kural:** Eksik import, tip ipucunda da olsa çalışma zamanı hatasıdır. (`from __future__ import annotations` bu değerlendirmeyi erteler.)
+
+---
+
+## 36. `asyncio.gather` tek istisnada her şeyi düşürür
+
+```python
+await asyncio.gather(*[cek(i) for i in range(1000)])
+# bir tanesi ReadTimeout alirsa 1000'inin sonucu da gider
+```
+
+**Gerçek:** 999 istek başarıyla tamamlanmıştı; tek bir istisna hepsini çöpe attı.
+**Neden:** `gather` varsayılan olarak ilk istisnayı çağırana fırlatır.
+**Kural:** Her görevin içinde hata yakala ve say — hata **kayıt seviyesinde** yalıtılsın. Alternatif `gather(..., return_exceptions=True)` ama o zaman sonuç listesini elle ayıklaman gerekir.
+
+---
+
+## 37. Coroutine'lerde kilit gerekmez, thread'lerde gerekir
+
+```python
+# thread icinde: KILIT sart
+with KILIT:
+    sayac["aktif"] += 1
+
+# coroutine icinde: kilit gerekmez
+sayaclar["basarili"] += 1
+```
+
+**Gerçek:** İkisi de "paralel" görünür ama yalnızca biri yarış durumu üretir.
+**Neden:** Thread'ler işletim sistemi tarafından **her an** kesilebilir. Coroutine'ler yalnızca `await` noktasında kesilir; iki `await` arasındaki kod bölünemez.
+**Kural:** Async kodda paylaşılan durumu değiştirirken `await` içermeyen bir blok yazıyorsan güvendesin. İçinde `await` varsa değilsin.
+
+---
+
+## 38. `ThreadPoolExecutor` CPU işini hızlandırmaz
+
+```
+CPU-yogun is:  sirali 1.08 sn → 4 thread 1.04 sn  (kazanc yok)
+                                → 4 surec  0.43 sn  (2.5 kat)
+I/O-yogun is:  sirali 2.02 sn → 4 thread 0.51 sn  (4 kat)
+```
+
+**Gerçek:** Aynı havuz, aynı işçi sayısı — bir işte sıfır kazanç, diğerinde tam dört kat.
+**Neden:** GIL, Python bayt kodu çalıştırılırken tutulur; I/O beklenirken bırakılır.
+**Kural:** `time` çıktısındaki `user / real` oranına bak. ~1 ise CPU-yoğun → süreç. ~0 ise I/O-yoğun → thread veya `asyncio`.
+
+---
+
+## 39. `tracemalloc` her belleği görmez
+
+```python
+tracemalloc.start()
+polars_ile_isle(dosya)
+_, tepe = tracemalloc.get_traced_memory()   # 12 MB (!)
+# gercek surec tepesi: 1849 MB
+```
+
+**Gerçek:** 1.8 GB kullanan bir işlem 12 MB olarak ölçüldü.
+**Neden:** `tracemalloc` yalnızca **Python nesnelerini** ve **kendi sürecini** sayar. Rust/C tarafında ayrılan bellek ve çocuk süreçler görünmez.
+**Kural:** Kütüphane veya `multiprocessing` varsa `resource.getrusage(...).ru_maxrss` ile de ölç. Ayrıca `ru_maxrss` sürecin **tüm ömrü** için bir yüksek-su işaretidir ve düşmez — birden çok yöntemi aynı süreçte ölçemezsin.
+
+---
+
+## 40. Sıcak döngüdeki her çağrı satır sayısıyla çarpılır
+
+```python
+while f.tell() < bitis:        # 20 milyon kez cagriliyor
+    satir = f.readline()
+```
+
+**Gerçek:** Bu döngü, konumu elle sayan sürümden **1.7 kat** yavaştı (200 → 117 sn CPU).
+**Neden:** `f.tell()` tampon hesabı yapar ve C katmanına iner. Tek başına ucuz, 20 milyon kez pahalı.
+**Kural:** Sıcak döngüde her çağrının maliyetini satır sayısıyla çarparak düşün. Ve **optimizasyon paralellikten önce gelir** — yavaş bir iç döngüyü paralelleştirmek yavaşlığını gizler.
+
+---
