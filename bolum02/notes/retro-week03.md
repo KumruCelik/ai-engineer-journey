@@ -72,19 +72,67 @@ _(kendi cevaplarını yaz)_
 1. `Record = dict[str, Any]` kararı bu hafta sana neye mal oldu, ne kazandırdı?
    Baştan alsan aynı kararı verir miydin?
 
+Bedeli somut oldu: testleri yazarken `ilk.ad` yazıp `AttributeError` aldım, ve
+alan adını yanlış yazdığımda mypy beni uyarmadı — hata çalışma anında `KeyError`
+olarak çıktı. Kazancı da somut: `sec`, `yeniden_adlandir` ve `tip_cevir` üçü de
+onar satır, çünkü hepsi sözlük işlemi; `dataclass` olsaydı çalışma anında sınıf
+üretmem gerekirdi.
+
+Kütüphane için aynı kararı yine verirdim, çünkü şemayı ben değil veri
+belirliyor. Ama şemanın bilindiği bir işte — tek bir tablodan okuyan bir boru
+hattında — `TypedDict` seçerdim: aynı sözlük davranışını korur, üstüne alan
+adlarını mypy'ye denetletir.
+
 2. Testi önce yazmak mı, kodu önce yazmak mı daha çok işine yaradı? Hangi
    durumda hangisi?
+
+İkisi farklı işe yaradı. Kodu önce yazdığım Aşama 1'de beş test tasarım hatası
+yaptım ve hiçbiri kırmızı vermedi — testin kendisi yanlışsa yeşil renk bir şey
+ifade etmiyor.
+
+Testlerin zaten var olduğu Aşama 2'de ise `Transform.__call__` imzasını
+değiştirdim: tam beş test kırıldı ve tam dokunduğum yerde kırıldı. Elle arama
+yapmadım, test çıktısı bana eksiksiz bir yapılacaklar listesi verdi.
+
 
 3. `>>` operatörünü aşırı yüklemek (`filtrele(...) >> esle(...)`) okunabilirliği
    artırdı mı, yoksa öğrenmesi gereken yeni bir kural mı ekledi?
 
+Okunabilirliği artırdı: `filtrele(...) >> esle(...)` verinin aktığı yönde,
+soldan sağa okunuyor; alternatifi olan iç içe çağrı tersten okunuyor. Bu hafta
+`>>` yüzünden bir tane bile hata almadım.
+
+Ama bedava değil. `>>` Python'da normalde bit kaydırmadır — okuyucuya öğrenmesi
+gereken yeni bir kural ekliyorum. Ayrıca `rapor`u zincir boyunca taşımak için
+`__rshift__` içine ayrı bir iç fonksiyon yazmam gerekti; `lambda` yetmedi.
+
+
 4. Aşama 3'ü kesme kararını bir kod incelemesinde savunman istense ne derdin?
 
-## Sonraki haftaya devredenler
+Kapsamı kestim çünkü sınırlı vakitte genişlik yerine derinlik daha değerliydi; gerekçeyi kod yazmadan önce belgeye yazdım, ve kesmenin borç 
+yaratmadığının kanıtı bir hafta sonra üç sınıfı çekirdeğe dokunmadan eklemem oldu.
 
-- `python-gotchas.md`: 20 → 40 madde (bu haftanın maddeleri yukarıdaki tablolarda)
-- Hafta 2 kontrol soruları 3 (Protocol vs ABC) ve 4 (100 GB CSV / 8 GB RAM)
-- İki araştırma yazısı: GIL kıyaslaması, veri kodu nasıl test edilir
-- `dev-setup` şablonuna iki kusur geri bildirimi: `make lint`te eksik
-  `ruff format --check`, README'de eskimiş kapsam tablosu
-- `mini-etl`de `tests/test_main.py` — şablondan gelen ölü kod, silinecek
+
+
+## Sonraki haftaya devredenler"
+desen = r"## Neyi farklı yapardım\n[\s\S]*?
+assert re.search(desen, metin), "bolum bulunamadi"
+metin = re.sub(desen, yeni, metin, count=1)
+
+metin = metin.rstrip() + """
+
+### Durum — Hafta 4 sonu
+
+Yukarıdaki liste Hafta 3 bittiğinde neyin eksik olduğunun kaydıdır; olduğu gibi
+duruyor. Maddelerin tamamı Hafta 4'te tamamlandı:
+
+| Madde | Nerede |
+| --- | --- |
+| Tuzak koleksiyonu 40 maddeye | `bolum02/notes/python-gotchas.md` |
+| Kontrol soruları 3 ve 4 | `bolum02/notes/week02-answers.md` |
+| GIL araştırması | `bolum02/research/gil.md` |
+| Veri kodu testi araştırması | `bolum02/research/veri-kodu-testi.md` |
+| `dev-setup` kusur geri bildirimi | PR ile birleştirildi |
+| `tests/test_main.py` ölü kodu | silindi |
+| Ödev 2.2 kalan kalemleri | `mini-etl` — `SqliteSink`, `StdoutSink`, `HttpSource`, logging, YAML |
+| Ödev 2.3 ve 2.4 | `perf-lab` — `LOG.md`, `ASYNC.md` |
