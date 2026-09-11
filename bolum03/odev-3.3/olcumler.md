@@ -288,3 +288,15 @@ Düzeltilmiş kural: düşük seçicilik index'in avantajını ortadan kaldırı
 7. Kötü satır tahmini şişmiş maliyet doğurur; şişmiş maliyet gereksiz JIT derlemesi tetikler.
 8. Kaynak artırmak (work_mem) planı değiştirir; değişen plan daha yavaş olabilir.
 9. Index'in maliyeti yer (tablo boyutunun %10–34'ü), yazma yavaşlaması ve VACUUM yüküdür.
+
+### D ekleme — önek araması ve collation
+
+Veritabanı collation'ı `en_US.utf8`. Bu collation'da B-tree index'in sıralaması `LIKE` önek karşılaştırmasıyla uyuşmadığı için `WHERE sku LIKE 'SKU-001%'` sorgusu normal index'i kullanamıyordu. `text_pattern_ops` operatör sınıfıyla açılan index sorunu çözdü:
+
+```
+Bitmap Index Scan on idx_products_sku_pattern
+  Index Cond: ((sku ~>=~ 'SKU-001'::text) AND (sku ~<~ 'SKU-002'::text))
+Execution Time: 0.135 ms   (onceki: 0.238 ms, Seq Scan)
+```
+
+Önek araması yapılacak metin kolonlarında, veritabanı collation'ı `C` değilse index `text_pattern_ops` ile oluşturulmalıdır.
