@@ -534,3 +534,250 @@ Düzeltme, hedef kalem sayısının döngü öncesinde bir kez belirlenmesidir. 
 **Metodolojik not — türetilmiş tablo:** "Sipariş başına ortalama" iki aşamalı bir hesaptır: önce sipariş bazında toplama, sonra bu toplamların ortalaması. Doğrudan `avg(quantity * unit_price)` yazmak sipariş değil kalem ortalamasını verir ve sonucu %41 düşük gösterir (135,83'e karşı 229,43). İki sonuç arasındaki ilişki `135,83 × 1,689 = 229,4` olarak doğrulanıyor; bu çarpımın tutması iki sorgunun da doğru yazıldığının kanıtıdır.
 
 **Metodolojik not — ortalamaların ortalaması:** Alt gruplarda hesaplanmış ortalamaların tekrar ortalanması, grup büyüklükleri farklı olduğunda yanlış sonuç verir. Genel ortalama her zaman ham veriden hesaplanmalıdır. Bu, 13. soruda kaydedilen toplanabilirlik kuralının aynısıdır.
+
+---
+
+## 18 — Ödemesi başarısız olan siparişlerin oranı
+
+**SQL:** `sql-mastery/queries/q18_basarisiz_odeme_orani.sql`
+
+**Sonuç:**
+
+```
+ status  | odeme_sayisi | yuzde | toplam_tutar
+---------+--------------+-------+--------------
+ success |       100000 | 92.51 |  21787312.34
+ failed  |         8094 |  7.49 |   1753608.86
+
+ toplam_siparis | basarisiz_denemeli | yuzde
+----------------+--------------------+-------
+         100000 |               8094 |  8.09
+
+ siparis_durumu | siparis | basarili_odemesi_olan | basarisiz_denemesi_olan | iade_kaydi_olan
+----------------+---------+-----------------------+-------------------------+-----------------
+ delivered      |   63110 |                 63110 |                    5128 |               0
+ shipped        |   12933 |                 12933 |                    1043 |               0
+ paid           |    9931 |                  9931 |                     777 |               0
+ created        |    6977 |                  6977 |                     590 |               0
+ cancelled      |    5070 |                  5070 |                     406 |               0
+ returned       |    1979 |                  1979 |                     150 |               0
+
+ basarili_odemesi_olmayan_siparis
+----------------------------------
+                                0
+```
+
+**İş yorumu:**
+
+Siparişlerin %8,09'unda en az bir başarısız ödeme denemesi var, ancak hepsi sonunda başarıyla ödenmiş: başarılı ödemesi olmayan tek bir sipariş yok. Bu, ödeme altyapısının analizini bu veri üzerinde anlamsız kılıyor, çünkü başarısızlık hiçbir zaman siparişi engellemiyor.
+
+Üç tutarsızlık tespit edildi ve üçü de aynı kök nedenden geliyor — üretici her siparişe, durumuna bakmaksızın bir başarılı ödeme yazıyor:
+
+1. **İade ödemesi hiç yok.** 1.979 sipariş `returned` durumunda, buna karşılık `refunded` statüsünde tek bir ödeme kaydı bulunmuyor. Mal geri gelmiş, para geri gitmemiş. Şema bu durumu destekliyor (`payments_amount_sign` kısıtı iade için negatif tutar zorunlu kılıyor); eksik olan veridir.
+2. **`created` durumundaki 6.977 siparişin tamamında başarılı ödeme var.** `created`, ödeme yapılmamış siparişi ifade eder; durum ile ödeme kaydı çelişiyor.
+3. **`cancelled` durumundaki 5.070 siparişin tamamında başarılı ödeme, hiçbirinde iade var.** İptal edilen siparişlerden tahsilat yapılmış ve iade edilmemiş.
+
+Ayrıca ödeme başarısızlığı oranı her sipariş durumunda ~%8 civarında sabit; gerçek bir sistemde başarısız ödeme ile iptal arasında güçlü bir ilişki beklenirdi.
+
+**Metodolojik not:** `payments` tablosundan tutar toplanırken `status` filtresi zorunludur. Başarısız denemelerin toplamı 1.753.608 TL'dir ve bunlar gerçekleşmemiş işlemlerdir; filtresiz `sum(amount)` ciroyu yaklaşık %8 fazla gösterir.
+
+**Çapraz doğrulama:** Başarılı ödemelerin toplamı 21.787.312 TL, sipariş başına 217,90 TL. 16. soruda hesaplanan ortalama sepet 229,43 TL idi. Aradaki %5'lik fark kupon indirimleriyle açıklanıyor (siparişlerin %18'i kupon kullanıyor). İki bağımsız hesabın bu farkla örtüşmesi beklenen sonuçtur.
+
+**İyileştirme notları (`scripts/generate.py`):**
+- `returned` siparişler için negatif tutarlı `refunded` ödeme kaydı üretilmeli.
+- `created` siparişler için başarılı ödeme üretilmemeli.
+- `cancelled` siparişler ya ödeme almamalı ya da iade kaydı içermeli.
+- Ödeme başarısızlığı ile sipariş durumu ilişkilendirilmeli.
+
+---
+
+## 19 — Funnel: created → paid → shipped → delivered dönüşüm oranları
+
+**SQL:** `sql-mastery/queries/q19_funnel.sql`
+
+**Varsayımlar:** `orders.status` yalnızca güncel durumu tutar, geçmiş tutulmaz. Aşamalar kümülatif sayılmıştır: teslim edilmiş bir sipariş ödeme ve kargo aşamalarından geçmiş kabul edilir. `returned` siparişler teslim aşamasına dahildir. `cancelled` siparişlerin hangi aşamada iptal edildiği bilinmediği için funnel dışında bırakılmıştır.
+
+**Sonuç:**
+
+```
+ asama1_olusturuldu | asama2_odendi | asama3_kargolandi | asama4_teslim
+--------------------+---------------+-------------------+---------------
+             100000 |         87953 |             78022 |         65089
+
+ olusturuldu_to_odendi | odendi_to_kargolandi | kargolandi_to_teslim | uctan_uca
+-----------------------+----------------------+----------------------+-----------
+                 87.95 |                88.71 |                83.42 |     65.09
+
+ gecis                      | dusen_siparis
+----------------------------+---------------
+ olusturuldu -> odendi      |          6977
+ odendi -> kargolandi       |          9931
+ kargolandi -> teslim       |         12933
+ iptal (asamasi bilinmiyor) |          5070
+```
+
+**İş yorumu:**
+
+Siparişlerin %87,95'i ödeme aşamasına, %78,02'si kargo aşamasına, %65,09'u teslimata ulaşıyor. En büyük kayıp kargo-teslimat geçişinde: 12.933 sipariş yolda kalmış durumda. Gerçek bir operasyonda bu, teslim edilemeyen gönderiler anlamına gelir ve kargo firması bazında incelenmesi gereken bir operasyonel alarmdır (25. soruda kargo firması kırılımına bakılacak).
+
+Ancak bu oranlardan davranışsal bir sonuç çıkarılamaz: veri üreticisi sipariş durumunu müşteri davranışına göre değil sabit ağırlıklara göre atıyor, dolayısıyla aşamalar arası kayıp doğrudan bu ağırlıkların kendisidir. Yöntem doğru, iş sonucu anlamsızdır.
+
+İki yapısal kısıt kaydedilmelidir:
+
+**Funnel çok geç başlıyor.** İlk aşama "sipariş oluşturuldu"dur; gerçek bir e-ticaret funnel'ı ziyaret, ürün görüntüleme, sepete ekleme ve ödeme başlatma adımlarını da içerir. Şemada oturum ve sepet verisi bulunmadığı için dönüşümün asıl kaybedildiği adımlar ölçülemiyor. Uçtan uca %65,09 oranı, gerçek bir funnel için olağanüstü yüksek görünür; çünkü ölçülen yalnızca son adımdır.
+
+**Durum geçmişi tutulmuyor.** `orders.status` tek bir güncel değer taşır, dolayısıyla "bu sipariş ne zaman ödendi, ne zaman kargolandı" sorusu cevaplanamıyor ve iptallerin hangi aşamada gerçekleştiği bilinemiyor. Funnel bu nedenle ölçüm değil varsayım üzerine kurulu. Çözüm bir olay tablosudur: `order_status_history(order_id, status, changed_at)`. Her durum değişikliğinin bir satır olarak tutulması hem funnel'ı ölçüme dönüştürür hem de aşamalar arası geçiş sürelerini hesaplanabilir kılar.
+
+**İyileştirme notu:** Şemaya `order_status_history` tablosu eklenmeli; Ödev 3.4'te SCD2 ile birlikte değerlendirilecek.
+
+---
+
+## 20 — Sepete girip satın alınmayan ürünler
+
+**SQL:** `sql-mastery/queries/q20_terk_edilen_urunler.sql`
+
+**Kapsam beyanı:** Şemada sepet tablosu bulunmuyor; sepete eklenip siparişe dönüşmeyen ürünler ölçülemiyor. En yakın karşılık olarak `created` ve `cancelled` durumundaki siparişlerdeki ürünler alınmıştır. Bu, gerçek sepet terkinden dar bir kümedir.
+
+**Sonuç:**
+
+```
+ terk_edilen_adet | terk_edilen_tutar | siparis_sayisi | etkilenen_urun
+------------------+-------------------+----------------+----------------
+            28169 |        2795633.42 |          12047 |           1620
+
+  id  |    sku    | list_price | toplam_adet | satilan | terk_edilen | terk_orani
+------+-----------+------------+-------------+---------+-------------+------------
+ 1025 | SKU-01025 |     221.28 |         235 |     184 |          49 |      20.85
+ 1572 | SKU-01572 |      81.70 |         166 |     128 |          34 |      20.48
+   42 | SKU-00042 |     109.95 |         109 |      84 |          21 |      19.27
+ 1488 | SKU-01488 |     111.35 |         529 |     420 |          98 |      18.53
+```
+
+**İş yorumu:**
+
+Satışa dönüşmeyen siparişlerin toplam değeri 2.795.633 TL, 28.169 adet ürün ve 1.620 farklı SKU'yu kapsıyor. Genel terk oranı %12,05'tir (12.047 sipariş / 100.000). Bu tutar, gerçekleşen 19,7 milyon TL'lik cironun %14'üne karşılık geliyor ve kurtarılabilir gelirin büyüklüğünü gösteriyor — gerçek bir operasyonda ödeme hatırlatma ve terk edilmiş sepet e-postası gibi müdahalelerin hedefi bu tutardır.
+
+**Metodolojik not — orana göre sıralamanın yanıltıcılığı:** Ürün bazında terk oranı sıralandığında ilk on beş ürün %17,3–%20,9 bandında çıkıyor, yani genel ortalamanın (%12,05) belirgin şekilde üzerinde. Ancak bu ürünlerin hiçbiri gerçekten farklı değildir: veri üreticisi sipariş durumunu ürüne bakmadan atadığı için her ürünün gerçek terk oranı %12'dir ve gözlenen farkların tamamı örnekleme dalgalanmasıdır. 100–500 adet hacimli bir üründe %12'lik oranın standart sapması %1,5–3 aralığındadır; 2.000 ürün arasından en yükseği seçildiğinde doğal olarak dalgalanmanın uç noktası seçilmiş olur.
+
+Bu, oran bazlı sıralamaların genel sorunudur: sıralamanın tepesi, gerçekten farklı olanları değil en oynak olanları toplar. Aynı mekanizma "en çok gelişme gösteren okul" listelerinin küçük okullarla dolmasının da sebebidir. Minimum hacim eşiği (burada `HAVING sum(quantity) >= 100`) sorunu hafifletir ancak ortadan kaldırmaz; tam çözüm istatistikseldir (güven aralığı veya Bayesçi düzeltme). Oran sıralayan her raporda sorulması gereken soru şudur: gözlenen fark, bu hacimde beklenen dalgalanmadan büyük mü?
+
+Eşik konulmadığında oluşabilecek küçük payda sorunu bu veri setinde gerçekleşmedi; terk oranı %100 olan ürün bulunmuyor.
+
+**Çapraz doğrulama:** Kapsamdaki sipariş sayısı 12.047, 12. soruda stok hareketi bulunmayan sipariş sayısıyla aynı. İki bağımsız sorgu aynı kümeyi işaret ediyor.
+
+---
+
+## 21 — Kupon kullanımının marj etkisi
+
+**SQL:** `sql-mastery/queries/q21_kupon_marj_etkisi.sql`
+**Kapsam:** `paid`, `shipped`, `delivered` siparişler (85.974 sipariş, bunların 15.503'ü kuponlu — %18,03).
+
+**Sonuç:**
+
+```
+   grup   | siparis_sayisi | ort_sepet | ort_brut_marj | ort_indirim | ort_net_marj | brut_marj_yuzde | net_marj_yuzde
+----------+----------------+-----------+---------------+-------------+--------------+-----------------+----------------
+ kuponlu  |          15503 |    228.64 |         87.36 |       65.51 |        21.84 |           38.21 |           9.55
+ kuponsuz |          70471 |    229.60 |         87.71 |        0.00 |        87.71 |           38.20 |          38.20
+
+ toplam_brut_marj | toplam_indirim | toplam_net_marj | indirimin_marja_orani
+------------------+----------------+-----------------+-----------------------
+       7535002.18 |     1015655.59 |      6519346.59 |                 13.48
+```
+
+**İş yorumu:**
+
+Kuponlu ve kuponsuz siparişlerin ortalama sepet tutarları pratikte aynı (228,64 TL ve 229,60 TL), brüt marj oranları da aynı (%38,21 ve %38,20). Buna karşılık kuponlu siparişlerde ortalama 65,51 TL indirim uygulanıyor ve net marj 87,71 TL'den 21,84 TL'ye, yani %75 oranında düşüyor. Net marj oranı %38,20'den %9,55'e geriliyor. Toplamda kuponlar brüt marjın %13,48'ini (1.015.656 TL) tüketiyor.
+
+Bu veri setinde kuponlar siparişlere rastgele atandığı için karşılaştırma nedensel olarak yorumlanabilir: kuponlu grup deney, kuponsuz grup kontrol niteliğindedir ve atama rastgeledir. Sepet tutarlarının eşit çıkması, kuponun harcama davranışını değiştirmediğini gösteriyor. Kupon, yalnızca zaten gerçekleşecek satışlardan marj eksiltiyor.
+
+Gerçek veride aynı karşılaştırma bu şekilde yorumlanamaz. Kuponu kimin kullandığı rastgele değildir; fiyata duyarlı ve satın almaya zaten yakın müşteriler kupon arar. Bu nedenle "kupon kullananların sepeti daha büyük" gözlemi kuponun sepeti büyüttüğünü kanıtlamaz, yalnızca kupon kullananların farklı bir müşteri grubu olduğunu gösterir — buna seçilim yanlılığı denir. Kampanya değerlendirmesinde doğru soru "kupon kullananlar daha mı çok harcadı" değil, "kupon olmasaydı bu satış yine gerçekleşir miydi" sorusudur (artımsallık). Bu soru ancak rastgele atamalı bir test (holdout grubu) ile cevaplanabilir.
+
+**Metodolojik not — çifte fan-out:** `orders`, `order_items` ve `order_coupons` doğrudan birleştirildiğinde sonuç 30.469 satır, doğru kalem sayısı ise 26.212'dir; şişme 1,16 kattır çünkü kuponlu siparişlerin bir kısmı iki kupon içerir. Aynı üst tablonun iki farklı alt tablosu doğrudan birleştirildiğinde her biri diğerinin satır sayısı kadar çoğalır ve iki ölçü iki farklı katsayıyla bozulur; oranlar bile tutmaz. Doğru yöntem, her alt tabloyu kendi taneciğinde ayrı ayrı toplayıp sonucu sipariş kimliği üzerinden birleştirmektir (CTE ile).
+
+---
+
+## 22 — Ürün başına ortalama puan ve yorum sayısı
+
+**SQL:** `sql-mastery/queries/q22_urun_puan_ortalamasi.sql`
+**Bağlam:** K-005 gereği aynı kullanıcı aynı ürüne birden çok yorum yazabilir.
+
+**Sonuç:**
+
+```
+ toplam_yorum | benzersiz_kullanici_urun_cifti | fazladan_yorum
+--------------+--------------------------------+----------------
+        26810 |                          23972 |           2838
+
+-- naif (butun yorumlar)          -- tekillestirilmis (kullanici-urun basina son yorum)
+  id  | yorum_sayisi | ort_puan     id  | yorum_sayisi | ort_puan
+------+--------------+----------  ------+--------------+----------
+  169 |         4225 |    4.009     169 |         2979 |    4.012
+  118 |         2111 |    4.056     118 |         1671 |    4.067
+  186 |         1298 |    4.062     186 |         1078 |    4.079
+
+ urun_sayisi | ortalamasi_degisen | en_buyuk_sapma | ortalama_sapma
+-------------+--------------------+----------------+----------------
+        1751 |                157 |          0.600 |         0.0068
+```
+
+**İş yorumu:**
+
+Toplam 26.810 yorumun 2.838'i (%10,6) aynı kullanıcı-ürün çiftinin tekrarlanmış yorumudur. Tekilleştirmenin etkisi iki ölçüde çok farklı:
+
+**Yorum sayısı ciddi biçimde şişiyor.** En çok yorum alan üründe naif sayım 4.225, tekilleştirilmiş sayım 2.979 — %29 fark. Ürün sayfasında gösterilen değerlendirme sayısı tüketici için güvenilirlik göstergesidir; %29 abartılı bir sayı yanıltıcıdır.
+
+**Ortalama puan ise pratikte değişmiyor.** 1.751 üründen yalnızca 157'sinin ortalaması değişiyor ve ortalama sapma 0,0068. Bunun nedeni tekrarlı yorumların rastgele puan almasıdır; ortalamayı sistematik bir yöne çekmiyorlar. Gerçek veride bu varsayım geçerli olmazdı: bir kullanıcı aynı ürüne ikinci kez yorum yazıyorsa genellikle görüşü değiştiği içindir, dolayısıyla tekrarlı yorumlar yönlüdür ve ortalamayı da kaydırır.
+
+**Etki az yorumlu ürünlerde yoğunlaşıyor.** Ortalama sapma ihmal edilebilir olsa da en büyük sapma 0,600 puandır. Az yorum alan bir üründe tek bir tekrarlı yorum ortalamayı belirgin şekilde oynatır ve ürün puanının satın alma kararında en etkili olduğu yer tam olarak yeni, az yorumlu ürünlerdir. Bu nedenle ürün puanı gösteren her ekranda tekilleştirme uygulanmalı; kullanıcı-ürün çifti başına yalnızca en güncel yorum sayılmalıdır.
+
+**Doğrulama:** Ortalama puanların 4,0 civarında toplanması beklenen sonuçtur; üreticideki puan ağırlıkları (5:%45, 4:%30, 3:%13, 2:%7, 1:%5) 4,03 ortalama verir.
+
+**Metodolojik not — "en sonuncuyu al" kalıbı:** Kullanıcı-ürün çifti başına en güncel yorumu seçmek için önce her çift için `max(created_at)` hesaplayan bir CTE oluşturulup `reviews` tablosu bu CTE ile tarih üzerinden birleştirildi. Window function'lardan önceki standart çözüm budur. Aynı sonuç `DISTINCT ON` veya `ROW_NUMBER()` ile tek adımda elde edilebilir (35. soruda karşılaştırılacak).
+
+**Yan bulgu:** Yorum alan ürün sayısı 1.751'dir; katalogdaki 2.000 üründen 249'u hiç yorum almamıştır (23. soru).
+
+---
+
+## 23 — Hiç yorum almamış ürünler
+
+**SQL:** `sql-mastery/queries/q23_yorumsuz_urunler.sql`
+
+**Sonuç:** 2.000 üründen 249'u (%12,45) hiç yorum almamış.
+
+```
+                     grup                     | urun_sayisi
+----------------------------------------------+-------------
+ 1 - hic siparise girmemis                    |           0
+ 2 - siparise girmis ama hic teslim edilmemis |           3
+ 3 - teslim edilmis ama yorum almamis         |         246
+
+  id  |    sku    | list_price | is_active | teslim_edilen_adet
+------+-----------+------------+-----------+--------------------
+ 1967 | SKU-01967 |      61.52 | f         |                 28
+  204 | SKU-00204 |     157.94 | t         |                 20
+ 1453 | SKU-01453 |     151.73 | f         |                 20
+```
+
+**İş yorumu:**
+
+Yorumsuz ürünlerin tamamına yakını (246/249) aslında satılmış ve teslim edilmiş ürünlerdir; hiç siparişe girmemiş tek bir ürün yoktur. Yani sorun ürünün satılmaması değil, satılan üründen geri bildirim toplanamamasıdır. Yorumsuz ürünlerin tamamı düşük hacimli: en çoğu 28 adet teslim edilmiş. Teslim edilen her kalem için yorum bırakma olasılığı sabit olduğundan, az satan ürünün hiç yorum almama olasılığı yüksektir.
+
+Bunun iş karşılığı soğuk başlangıç (cold start) döngüsüdür: yorumu olmayan ürün tüketici tarafından daha riskli görülür ve daha az satar, az satan ürün daha az yorum alır. Döngü kendiliğinden kırılmaz. Teslimat sonrası yorum isteme kampanyaları bu 246 ürünü öncelikli hedef almalıdır; katalogun %12,3'ünün sosyal kanıt olmadan satışa sunulması, dönüşüm kaybı anlamına gelir.
+
+İkinci grup olan "siparişe girmiş ama hiç teslim edilmemiş" 3 ürün ayrıca incelenmeye değerdir: bu ürünler sipariş ediliyor ancak hiçbiri teslimata ulaşmıyor. Gerçek bir operasyonda stok, tedarik veya kargo tarafında bir sorun işaretidir.
+
+**Performans notu:** (c) sorgusu 1,755 saniye sürdü; bu ana kadarki sorguların 20–40 katı. Sebep, `SELECT` listesindeki bağıntılı alt sorgunun her ürün için `order_items` ve `orders` tablolarını yeniden taraması ve yabancı anahtar kolonlarında index bulunmamasıdır. Ödev 3.3 için aday sorgu olarak kaydedildi.
+
+---
+
+## Ödev 3.3 için biriken yavaş sorgu adayları
+
+| # | Sorgu | Süre | Şüphelenilen sebep |
+|---|---|---|---|
+| 1 | `seed/refresh_stock.sql` — `UPDATE products SET stock_cached = (bagintili alt sorgu)` | 13,2 sn | Her ürün için 164 bin satırlık defterin yeniden taranması |
+| 2 | `q23` (c) — `SELECT` içinde bağıntılı alt sorgu | 1,76 sn | Ürün başına `order_items` + `orders` taraması, FK index'i yok |
+| 3 | `q21` (b) — CTE + LEFT JOIN, 86 bin sipariş | 0,45 sn | `order_items.order_id` ve `order_coupons.order_id` index'siz |
+| 4 | `checks.sql` (1) — `stock_cached` doğrulaması | 11,1 sn | 1 ile aynı kalıp |
+
+Ortak nokta: yabancı anahtar kolonlarında index bulunmuyor (bilinçli karar — 002_products.sql notu).

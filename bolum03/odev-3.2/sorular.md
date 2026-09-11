@@ -29,12 +29,12 @@ Durum: [ ] açık · [x] kapalı
 - [x] 15 — Ciro bazında en çok satan 10 ürün. 14 ile farkı ne anlatıyor?
 - [x] 16 — Sipariş başına ortalama sepet tutarı.
 - [x] 17 — Sipariş başına ortalama kalem sayısı.
-- [ ] 18 — Ödemesi başarısız olan sipariş oranı.
-- [ ] 19 — Funnel: created → paid → shipped → delivered dönüşüm oranları. (zorunlu)
-- [ ] 20 — İptal edilen siparişlerdeki ürünler: sepete girip satılmayanlar. (zorunlu)
-- [ ] 21 — Kupon kullanımının marj üzerindeki etkisi. (zorunlu)
-- [ ] 22 — Ürün başına ortalama puan ve yorum sayısı. (çok yorumlu kullanıcı tuzağı)
-- [ ] 23 — Hiç yorum almamış ürünler.
+- [x] 18 — Ödemesi başarısız olan sipariş oranı.
+- [x] 19 — Funnel: created → paid → shipped → delivered dönüşüm oranları. (zorunlu)
+- [x] 20 — İptal edilen siparişlerdeki ürünler: sepete girip satılmayanlar. (zorunlu)
+- [x] 21 — Kupon kullanımının marj üzerindeki etkisi. (zorunlu)
+- [x] 22 — Ürün başına ortalama puan ve yorum sayısı. (çok yorumlu kullanıcı tuzağı)
+- [x] 23 — Hiç yorum almamış ürünler.
 - [ ] 24 — Ülke bazında sipariş sayısı ve ciro.
 - [ ] 25 — Kargo firması bazında ortalama teslim süresi.
 
