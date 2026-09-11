@@ -40,25 +40,25 @@ Durum: [ ] açık · [x] kapalı
 
 ## C. Seviye 3 — CTE ve window function
 
-- [ ] 26 — Kohort retention tablosu: yeni kullanıcıların N. ay dönüş oranı. (zorunlu)
-- [ ] 27 — RFM segmentasyonu (NTILE ile). (zorunlu)
+- [x] 26 — Kohort retention tablosu: yeni kullanıcıların N. ay dönüş oranı. (zorunlu)
+- [x] 27 — RFM segmentasyonu (NTILE ile). (zorunlu)
 - [x] 28 — Ürün başına 7 günlük hareketli ortalama satış. (zorunlu)
 - [x] 29 — Ardışık günlerde alışveriş yapan kullanıcı serileri (gaps-and-islands). (zorunlu)
 - [x] 30 — Her kategoride ilk 3 ürün (ROW_NUMBER + PARTITION BY). (zorunlu)
 - [x] 31 — Ay bazında büyüme oranı (LAG). (zorunlu)
-- [ ] 32 — İlk sipariş ile ikinci sipariş arasındaki medyan süre. (zorunlu)
-- [ ] 33 — Aynı kullanıcının aynı ürünü tekrar alma oranı. (zorunlu)
+- [x] 32 — İlk sipariş ile ikinci sipariş arasındaki medyan süre. (zorunlu)
+- [x] 33 — Aynı kullanıcının aynı ürünü tekrar alma oranı. (zorunlu)
 - [ ] 34 — Zaman içinde fiyat değişimi: SCD2 tablosundan geçerli fiyatı bulma. (zorunlu, Ödev 3.4'ten sonra)
-- [ ] 35 — Kullanıcı-ürün başına en son yorum (DISTINCT ON).
+- [x] 35 — Kullanıcı-ürün başına en son yorum (DISTINCT ON).
 - [x] 36 — Kümülatif ciro seyri (SUM OVER).
-- [ ] 37 — Kategori ağacında bir kökün altındaki tüm ürünler (recursive CTE).
+- [x] 37 — Kategori ağacında bir kökün altındaki tüm ürünler (recursive CTE).
 - [ ] 38 — Her kullanıcının ilk siparişinde aldığı ürünler.
 - [ ] 39 — Kullanıcı başına sipariş aralıklarının ortalaması.
 - [ ] 40 — En sık birlikte satın alınan ürün çiftleri (self join).
-- [ ] 41 — Her ayın en iyi 3 müşterisi (RANK).
+- [x] 41 — Her ayın en iyi 3 müşterisi (RANK).
 - [ ] 42 — Kullanıcı yaşam boyu değeri ve ilk 90 günün payı.
 - [ ] 43 — Stok defterinden gün gün stok seyri (kümülatif toplam).
-- [ ] 44 — Ciroda ilk %20 müşterinin payı (Pareto).
+- [x] 44 — Ciroda ilk %20 müşterinin payı (Pareto).
 - [ ] 45 — Terk oranı: daha önce sipariş vermiş ama son 90 gündür vermeyen kullanıcılar.
 
 ## D. Veri kalitesi

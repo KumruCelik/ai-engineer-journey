@@ -1062,3 +1062,273 @@ Dağılımın ucundaki değerler ise operasyonel olarak incelenmesi gereken işa
 En uzun serilerin 2025 sonu ve 2026'ya yığılması, 09. soruda tespit edilen taban büyümesi etkisinin sonucudur; sipariş yoğunluğu arttıkça ardışık gün olasılığı da artar. Seri uzunluğu ölçüsü dönemler arası karşılaştırmada bu nedenle doğrudan kullanılamaz.
 
 **Metodolojik not — gaps and islands:** Ardışıklık sorguları, sıralı bir değerden satır numarasının çıkarılmasıyla çözülür. Her iki değer de birer birer arttığı için fark ardışık satırlarda sabit kalır; boşlukta sıçrar. Bu fark grup anahtarı olarak kullanılır. Aynı kalıp tarih serileri, kesintisiz oturumlar, ardışık kazanma serileri ve durum değişmeyen dönemler gibi tüm "kesintisiz aralık" problemlerine uygulanır.
+
+---
+
+## 27 — RFM segmentasyonu
+
+**SQL:** `sql-mastery/queries/q27_rfm_segmentasyonu.sql`
+**Kapsam:** `paid`, `shipped`, `delivered` siparişler; 17.719 müşteri.
+**Referans tarih:** verinin son sipariş tarihi.
+
+**Sonuç — segment dağılımı:**
+
+```
+   segment    | musteri | yuzde | ort_recency_gun | ort_siparis | ort_harcama | toplam_ciro
+--------------+---------+-------+-----------------+-------------+-------------+-------------
+ Sampiyon     |    2378 | 13.42 |             8.3 |       15.80 |     3610.75 |  8586366.03
+ Orta         |    9088 | 51.29 |            92.6 |        3.85 |      881.76 |  8013469.25
+ Riskli sadik |    1400 |  7.90 |           220.4 |        4.81 |     1122.92 |  1572085.91
+ Kayip        |    4219 | 23.81 |           320.6 |        1.35 |      313.44 |  1322407.11
+ Yeni musteri |     634 |  3.58 |             9.5 |        1.61 |      363.55 |   230489.78
+```
+
+**Sonuç — boyutların bağımsızlığı:**
+
+```
+ f_m_korelasyon | r_f_korelasyon | musteri | f_ve_m_ayni_dilim | ayni_dilim_yuzde
+----------------+----------------+---------+-------------------+------------------
+         0.9918 |        -0.1278 |   17719 |              9291 |            52.44
+```
+
+**Sonuç — NTILE ve eşitlik:**
+
+```
+ siparis_sayisi | musteri | en_dusuk_dilim | en_yuksek_dilim
+----------------+---------+----------------+-----------------
+              1 |    4168 |              1 |               2
+              2 |    4158 |              2 |               3
+              3 |    3055 |              3 |               4
+```
+
+**İş yorumu:**
+
+Segmentasyon beklenen yapıyı üretiyor: şampiyon müşteriler tabanın %13,42'sini oluştururken toplam cironun %43,5'ini sağlıyor; kayıp segmenti tabanın %23,81'i olmasına rağmen cironun yalnızca %6,7'sini üretiyor. Riskli sadık segmenti (ortalama 4,81 sipariş vermiş ancak 220 gündür alışveriş yapmamış 1.400 müşteri) geri kazanım kampanyalarının öncelikli hedefidir; bu müşteriler değerlerini kanıtlamış ancak uzaklaşmışlardır.
+
+**Bulgu — RFM bu veride iki boyuta çöküyor.** Frequency ile Monetary arasındaki korelasyon 0,9918'dir ve müşterilerin %52,44'ünde iki puan birebir aynı çıkmıştır. Monetary bağımsız bir bilgi taşımamaktadır. Kaynağı 11. soruda tespit edilmişti: ortalama sepet tutarı tüm müşterilerde ~228 TL olduğu için toplam harcama, sipariş sayısının sabit bir katına eşittir.
+
+Gerçek veride F–M korelasyonu tipik olarak 0,6–0,8 bandındadır. 0,99 düzeyinde bir korelasyon görüldüğünde iki seçenek vardır: boyutlardan birini çıkarmak, veya Monetary yerine ortalama sipariş tutarını (AOV = M/F) kullanmak. AOV, Frequency'den bağımsız gerçek bir ayrım sağlar — sık ve küçük alışveriş yapan müşteriyi, seyrek ve büyük alışveriş yapandan ayırır. Bu veri setinde AOV de tüm müşterilerde sabit olduğu için bu çözüm de uygulanamaz; kısıt yöntemde değil veridedir.
+
+Recency ile Frequency arasındaki korelasyon −0,1278'dir; zayıf ve beklenen yönde (sık alışveriş yapan müşteri daha yakın zamanda alışveriş yapmıştır). Recency bağımsız bilgi taşımaktadır.
+
+**Metodolojik not — `NTILE` ve eşitlik:** `NTILE` değere değil sıraya göre böler. Tam olarak 1 sipariş vermiş 4.168 müşteri iki farklı dilime dağılmış, yani birbirinin tıpatıp aynı olan müşteriler farklı puan almıştır. Bu durumda segmentlere farklı kampanya uygulanması, gerçekte hiçbir farkı bulunmayan gruplara farklı muamele anlamına gelir ve kampanya karşılaştırmaları yorumlanamaz hâle gelir. Eşitliğin yoğun olduğu kolonlarda `NTILE` yerine iş anlamı taşıyan sabit eşikler (1 sipariş = F1, 2–3 = F2, 4–6 = F3 gibi) tercih edilmelidir.
+
+---
+
+## 32 — İlk sipariş ile ikinci sipariş arasındaki medyan süre
+
+**SQL:** `sql-mastery/queries/q32_ilk_ikinci_siparis_suresi.sql`
+**Kapsam:** `paid`, `shipped`, `delivered` siparişler.
+
+**Sonuç:**
+
+```
+ ikinci_siparis_veren | ortalama_gun |  p25  | medyan |  p75   |  p90   | en_uzun
+----------------------+--------------+-------+--------+--------+--------+---------
+                13551 |       112.01 | 23.25 |  66.62 | 156.05 | 286.67 |  842.30
+
+ siparis_veren_musteri | tek_siparisli | tekrar_eden | tekrar_orani
+-----------------------+---------------+-------------+--------------
+                 17719 |          4168 |       13551 |        76.48
+```
+
+**İş yorumu:**
+
+İkinci siparişini veren müşterilerde iki sipariş arasındaki medyan süre 66,62 gündür; müşterilerin dörtte biri 23 gün içinde, dörtte üçü 156 gün içinde geri dönüyor. Elde tutma kampanyalarının zamanlaması bu dağılıma göre kurulmalıdır: ilk siparişten 3–4 hafta sonra gönderilecek bir hatırlatma, medyanın öncesine denk geldiği için müşterilerin çoğunluğuna henüz geri dönmeden ulaşır. 287 günü bulan 90. yüzdelik ise kampanya penceresinin ne kadar uzun tutulması gerektiğini gösteriyor.
+
+**Metodolojik not — medyan ve ortalama:** Ortalama 112,01 gün, medyan 66,62 gündür; ortalama medyanın 1,68 katıdır. Dağılım sağa çarpıktır, yani uzun süre sonra dönen küçük bir grup ortalamayı yukarı çekmektedir. Süre, gelir ve sepet tutarı gibi sağa çarpık dağılımlarda ortalama tipik davranışı tarif etmez; medyan ve yüzdelikler raporlanmalıdır. Ortalamanın raporlanması tipik geri dönüş süresini %68 abartırdı.
+
+**Metodolojik not — hayatta kalma yanlılığı (üçüncü kez):** Bu medyan yalnızca ikinci siparişini vermiş 13.551 müşteri üzerinden hesaplanmıştır. Hiç ikinci sipariş vermemiş 4.168 müşterinin (%23,52) geri dönüş süresi tanımsızdır ve hesaba girmemiştir. Doğru ifade "müşteriler 67 günde geri dönüyor" değil, "geri dönenler 67 günde dönüyor, %23,5'i hiç dönmüyor" şeklindedir. Aynı yanlılık 25. soruda teslim edilmeyen kargılarda görülmüştü. Bir süre ortalaması raporlanırken her zaman olayı hiç yaşamayanların oranı birlikte verilmelidir.
+
+Bu ölçünün doğru alternatifi, geri dönüş oranını zaman içinde izleyen kohort analizidir (26. soru).
+
+**Veri notu:** Tekrar sipariş oranı %76,48 olarak bulundu. Gerçek e-ticarette bir yıl içinde ikinci siparişini veren müşteri oranı tipik olarak %20–30 bandındadır; buradaki yüksek oran, üreticinin kullanıcı seçimindeki güç yasasından kaynaklanmaktadır.
+
+---
+
+## 26 — Kohort retention tablosu
+
+**SQL:** `sql-mastery/queries/q26_kohort_retention.sql`
+**Kapsam:** `paid`, `shipped`, `delivered` siparişler.
+**Kohort tanımı:** Kullanıcının ilk siparişini verdiği ay. Retention = kohorttaki kullanıcıların N. ayda en az bir sipariş verme oranı.
+
+**Sonuç (seçilmiş satırlar):**
+
+```
+   kohort   | kohort_boyu |  m1  |  m2  |  m3  |  m6  | m12
+------------+-------------+------+------+------+------+------
+ 2024-01-01 |          30 | 16.7 | 30.0 | 26.7 | 26.7 | 20.0
+ 2024-05-01 |         191 | 16.8 | 14.1 | 11.0 | 29.3 | 16.8
+ 2024-06-01 |         329 | 22.8 | 17.9 | 14.6 | 31.0 | 18.5
+ 2024-07-01 |         388 | 14.2 | 12.4 | 15.2 |  9.5 | 13.7
+ 2024-08-01 |         337 | 10.7 | 12.2 | 24.9 | 11.3 | 16.6
+ 2025-05-01 |         626 | 19.5 | 21.7 | 16.0 | 29.1 | 15.2
+ 2025-06-01 |         773 | 19.0 | 15.9 | 15.5 | 30.0 | 20.6
+ 2026-03-01 |        1084 | 35.3 | 36.4 | 40.7 |      |
+ 2026-05-01 |         499 | 28.7 |  0.0 |      |      |
+ 2026-06-01 |         416 |  0.0 |  0.0 |      |      |
+```
+
+**İş yorumu:**
+
+**Bulgu 1 — Kohort tablosu takvim mevsimselliğiyle kirlenmiş.** `m6` kolonunda sistematik bir örüntü var: altıncı ayı kasım veya aralığa denk gelen kohortlarda retention %29–31, ocak veya şubata denk gelenlerde %9,5–11,3. Örüntü iki yıl üst üste aynı şekilde tekrarlanıyor (2024-05 → %29,3, 2024-06 → %31,0, 2024-07 → %9,5; 2025-05 → %29,1, 2025-06 → %30,0). Bu bir müşteri davranışı farkı değil, kampanya döneminin takvimdeki yeridir.
+
+Kohort tabloları bu nedenle iki eksende okunur: satır boyunca ilerleyen aylar yaşam döngüsü etkisini, köşegen boyunca aynı takvim ayına denk gelen hücreler ise mevsimsellik ve kampanya etkisini gösterir. İkisi ayrılmadan "üçüncü ay retention'ı düştü" ifadesi kurulamaz; düşüş, o ayın ocağa denk gelmesinden kaynaklanıyor olabilir. Doğru karşılaştırma, aynı takvim ayına denk gelen kohortlar arasında yapılır.
+
+**Bulgu 2 — Retention eğrisi düşmüyor.** Gerçek retention eğrilerinde m1 en yüksek değerdir ve sonraki aylarda hızla düşer. Bu veride m1, m2, m3, m6 ve m12 kabaca aynı bantta (%15–25) seyrediyor. Veri üreticisi sipariş tarihlerini müşteri davranışına göre değil ağırlıklı rastgele seçtiği için "müşterinin uzaklaşması" diye bir olgu üretilmiyor; retention hafızasız davranıyor. Gerçek bir elde tutma analizi bu veri üzerinde yapılamaz.
+
+**Bulgu 3 — Geç kohortlarda retention yüksek görünüyor.** 2026-03 kohortunun m1/m2/m3 değerleri %35–41 ile diğer kohortların belirgin üzerinde. Sebebi, geç kaydolan kullanıcıların tüm sipariş etkinliğinin kısa bir pencereye sıkışmasıdır (09. soruda tespit edilen taban etkisinin kohort tablosundaki yansıması).
+
+**Metodolojik not — gelecek hücreler `0` değil `NULL` olmalıdır.** Son kohortların ileri ay hücreleri, o ay henüz yaşanmadığı için ölçülemez. Bu hücrelere `0` yazılması "kimse dönmedi" anlamına gelir ve retention grafiğinin dibe vurmasına yol açar. Sorguda `m3`, `m6` ve `m12` kolonlarına kohort tarihi + N ay <= veri ufku koşulu eklenmiş, `m1` ve `m2` kolonlarına bilerek eklenmemiştir; sonuçta son iki kohortta `0.0` değerleri görünmektedir. Bu hücreler de `NULL` olmalıdır.
+
+**Metodolojik not — kohort büyüklüğü gösterilmelidir.** 2024-01 kohortu 30 kişiden oluşuyor; `m2 = %30,0` değeri 9 kişiye karşılık gelir ve tek bir kişilik değişim oranı %3,3 oynatır. Kohort tablolarında kohort büyüklüğü kolonu her zaman gösterilmeli, küçük kohortların hücreleri yorumlanmamalıdır.
+
+**Düzeltme notu:** `m1` ve `m2` kolonlarına da `CASE WHEN kohort + interval 'N month' <= veri_ufku` koruması eklenecek.
+
+**Düzeltme uygulandı:** `m1` ve `m2` kolonlarına da ufuk koruması eklendi. Düzeltilmiş çıktıda 2026-06 kohortunun tüm hücreleri, 2026-05 kohortunun ise `m2` ve sonrası boş dönüyor. Kohort tablosu artık doğru üçgen şeklini alıyor.
+
+---
+
+## 35 — Kullanıcı-ürün başına en son yorum
+
+**SQL:** `sql-mastery/queries/q35_son_yorum.sql`
+
+**Sonuç:** Her iki yöntem de 23.972 satır döndürüyor ve bu sayı, benzersiz kullanıcı-ürün çifti sayısına eşit.
+
+```
+ distinct_on_satir | row_number_satir | benzersiz_cift
+-------------------+------------------+----------------
+             23972 |            23972 |          23972
+```
+
+**Metodolojik not:** `DISTINCT ON (kolonlar)` her grup için `ORDER BY`'a göre ilk satırı seçer ve `ORDER BY`'ın bu kolonlarla başlaması zorunludur. Postgres'e özgüdür. Taşınabilir karşılığı `ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...) = 1` kalıbıdır; iki yazım bu veride aynı sonucu üretti. Tek satır seçiliyorsa `DISTINCT ON` daha kısa ve genellikle daha hızlıdır; grup başına birden fazla satır (ilk N) gerekiyorsa `ROW_NUMBER` zorunludur.
+
+Eşitlik durumunda hangi satırın seçileceği belirsiz kalmasın diye `ORDER BY`'a `id DESC` ikincil ölçütü eklenmiştir; aksi hâlde aynı saniyede yazılmış iki yorumdan hangisinin seçileceği çalıştırmadan çalıştırmaya değişebilir (30. sorudaki determinizm notunun aynısı).
+
+---
+
+## 33 — Aynı kullanıcının aynı ürünü tekrar alma oranı
+
+**SQL:** `sql-mastery/queries/q33_urun_tekrar_alim.sql`
+**Kapsam:** `paid`, `shipped`, `delivered` siparişler.
+
+**Sonuç:**
+
+```
+ kullanici_urun_cifti | tekrar_alinan_cift | tekrar_alim_orani | en_cok_tekrar
+----------------------+--------------------+-------------------+---------------
+               113689 |              13003 |             11.44 |           335
+
+ product_id |    sku    | list_price | alan_kullanici | tekrar_alan | tekrar_orani
+------------+-----------+------------+----------------+-------------+--------------
+        169 | SKU-00169 |      34.19 |          10075 |        4207 |        41.76
+        118 | SKU-00118 |      29.57 |           6427 |        1849 |        28.77
+        186 | SKU-00186 |     290.86 |           4666 |        1077 |        23.08
+       1573 | SKU-01573 |      53.65 |           3692 |         765 |        20.72
+        720 | SKU-00720 |      20.68 |           3040 |         561 |        18.45
+```
+
+**İş yorumu:**
+
+Kullanıcı-ürün çiftlerinin %11,44'ünde aynı ürün en az iki ayrı siparişte satın alınmış. Ürün bazında tekrar alım oranı sıralaması ise 14. sorudaki adet bazında en çok satan ürün sıralamasıyla birebir aynı çıkıyor. Bu, tekrar alım oranının bu veride ürün kalitesini değil ürün popülerliğini ölçtüğü anlamına geliyor; veri üreticisi ürünü her sepette bağımsız olarak aynı güç yasasıyla seçtiği için popüler ürünün aynı kullanıcı tarafından ikinci kez seçilmesi de kaçınılmaz olarak olasıdır. Ürün düzeyinde "tekrar satın alınabilirlik" diye bir kavram veride üretilmemiştir.
+
+Gerçek veride bu ölçü, yorumdan daha güvenilir bir memnuniyet göstergesidir: yorum yazmak bedavadır, tekrar satın almak değildir — müşteri parasıyla oy verir. Ancak ürün tipine göre normalize edilmelidir. Tüketilen ürünlerde (kahve, bebek bezi, kartuş) yüksek tekrar oranı normaldir; dayanıklı ürünlerde (yatak, televizyon) düşük oran kötü bir işaret değildir. Anlamlı kullanım, tekrar alım oranını aynı kategori içindeki ürünler arasında karşılaştırmaktır.
+
+Uç değer olarak aynı kullanıcının aynı ürünü 335 ayrı siparişte satın aldığı görülüyor. Bu, 11, 29 ve 32. sorularda tespit edilen aşırı yoğunlaştırıcı güç yasasının dördüncü görünümüdür ve aynı hesaba (6754) aittir.
+
+---
+
+## 37 — Kategori ağacında bir kökün altındaki tüm ürünler
+
+**SQL:** `sql-mastery/queries/q37_kategori_agaci.sql`
+
+**Sonuç:**
+
+```
+ seviye | kategori_sayisi        -- agac yapisi
+--------+-----------------
+      0 |               8
+      1 |              32
+
+ id | seviye |                yol                 -- Elektronik alt agaci
+----+--------+------------------------------------
+  1 |      0 | Elektronik
+  3 |      1 | Elektronik > Elektronik Aksesuar
+  5 |      1 | Elektronik > Elektronik Premium
+  2 |      1 | Elektronik > Elektronik Temel
+  4 |      1 | Elektronik > Elektronik Yeni Sezon
+
+ kok_kategori | urun_sayisi | satilan_adet |    ciro    | ciro_payi
+--------------+-------------+--------------+------------+-----------
+ Kitap        |         249 |        36525 | 5364314.79 |     27.20
+ Kirtasiye    |         272 |        49576 | 3402083.00 |     17.25
+ Mutfak       |         255 |        28949 | 2414850.74 |     12.24
+ Spor         |         266 |        16688 | 1940557.77 |      9.84
+ Bebek        |         261 |        15915 | 1794762.85 |      9.10
+ Giyim        |         238 |        25709 | 1777975.49 |      9.01
+ Bahce        |         242 |        14178 | 1657217.47 |      8.40
+ Elektronik   |         217 |        12694 | 1373055.97 |      6.96
+```
+
+**İş yorumu:**
+
+Kök kategori bazında ciro dağılımı, 13. soruda yaprak seviyesinde bırakılan hesabın tamamlanmış hâlidir. Kitap kökü toplam cironun %27,20'sini, Elektronik ise %6,96'sını üretiyor; buna karşılık ürün sayıları birbirine yakın (217–272). Yani fark ürün sayısından değil, hangi kökün altına popüler ve pahalı ürünlerin düştüğünden kaynaklanıyor. Ürünler kategorilere rastgele dağıtıldığı için bu sıralamadan kategori stratejisi çıkarılamaz; ölçüm yöntemi geçerli, iş sonucu değildir.
+
+Ürün sayısının kategoriler arasında dengeli, cironun ise dengesiz dağılması yine de anlamlı bir ölçüdür: gerçek bir katalogda ürün başına ciro kökler arasında bu kadar farklıysa (Kitap'ta 21.543 TL/ürün, Elektronik'te 6.327 TL/ürün) ya fiyatlama ya da ürün seçimi kategoriler arasında tutarsızdır.
+
+**Çapraz doğrulama:** Kök kategori cirolarının toplamı 19.724.818,08 TL'dir; 13. ve 36. sorularda bulunan genel ciro ile birebir aynıdır.
+
+**Metodolojik not — `WITH RECURSIVE`:** Yapı üç parçadan oluşur: başlangıç sorgusu (anchor), zorunlu `UNION ALL`, ve CTE'nin kendi adını kullanan yineleme sorgusu. Postgres, anchor'ın ürettiği satırlarla yinelemeyi çalıştırır ve yeni satır üretilmeyene kadar tekrarlar.
+
+Veride bir döngü bulunması hâlinde sorgu sonlanmaz. `categories_not_self` kısıtı yalnızca bir kategorinin kendi üstü olmasını engeller; A→B→A gibi daha uzun döngüleri engellemez. Bu, tek satırlık `CHECK` kısıtlarıyla yakalanamayan bir tutarlılık kuralıdır. Pratik koruma, yineleme sorgusuna seviye üst sınırı eklemektir (`WHERE seviye < 10`).
+
+Bu şemadaki ağaç iki seviye derindir ve aynı sonuç tek bir self-join ile de elde edilebilirdi. Recursive CTE'nin değeri derinliğin önceden bilinmediği yapılardadır (organizasyon şeması, dosya sistemi, malzeme listesi); yazılan sorgu derinlikten bağımsız çalışır.
+
+**Metodolojik not:** `sum(sum(x)) OVER ()` yazımında içteki toplama fonksiyonu `GROUP BY` ile, dıştaki window function ise gruplama sonrasında çalışır. Window function'ların `GROUP BY`'dan sonra hesaplanması bu yazımı mümkün kılar.
+
+---
+
+## 41 ve 44 — Her ayın en iyi 3 müşterisi, ve Pareto yoğunlaşması
+
+**SQL:** `sql-mastery/queries/q41_q44_musteri_sirasi_ve_pareto.sql`
+**Kapsam:** `paid`, `shipped`, `delivered` siparişler; 17.719 müşteri.
+
+**Sonuç — Pareto:**
+
+```
+ musteri_yuzdeligi | kacinci_musteriden | bu_noktada_ciro_payi
+-------------------+--------------------+----------------------
+                 1 |                177 |                21.30
+                 5 |                886 |                38.27
+                10 |               1772 |                49.62
+                20 |               3544 |                64.44
+                30 |               5316 |                74.71
+                50 |               8860 |                88.26
+                80 |              14175 |                98.16
+               100 |              17719 |               100.00
+```
+
+**Sonuç — aylık en iyi müşteriler (son aylar):**
+
+```
+     ay     | sira | user_id | siparis | harcama  | ay_icindeki_pay
+------------+------+---------+---------+----------+-----------------
+ 2026-04-01 |    1 |    6754 |     402 | 94740.84 |            6.07
+ 2026-05-01 |    1 |    6754 |     389 | 93847.99 |            5.67
+ 2026-06-01 |    1 |    6754 |     449 | 97278.70 |            5.23
+ 2026-06-01 |    2 |   16900 |     126 | 25474.94 |            1.37
+```
+
+**İş yorumu:**
+
+Ciro yoğunlaşması klasik 80/20 kuralından daha ılımlı: müşterilerin ilk %20'si cironun %64,44'ünü üretiyor. Ancak yoğunlaşma tepede çok daha sert — ilk %1 (177 müşteri) tek başına cironun %21,30'unu, ilk %10 ise yarısını (%49,62) oluşturuyor. Gerçek e-ticaret operasyonlarında 20/60–70 bandı yaygındır, dolayısıyla eğrinin genel şekli gerçekçidir.
+
+Bu eğri, kazanım ve elde tutma bütçeleri arasındaki dengenin dayanağıdır: ilk %10'daki 1.772 müşterinin kaybı cironun yarısının kaybı anlamına gelir ve bu hacmi yeni müşteri kazanımıyla telafi etmek kat kat pahalıdır.
+
+**Bulgu — tek hesaba bağımlılık.** Kullanıcı 6754, 2026 Nisan, Mayıs ve Haziran aylarında aylık cironun sırasıyla %6,07, %5,67 ve %5,23'ünü tek başına üretmiş; Nisan 2026'da 402 sipariş vermiş, yani günde ortalama 13,4 sipariş. Bu hesap 2026 Mart'tan önce hiçbir listede görünmüyor, dolayısıyla toplam 1.613 siparişinin tamamı yaklaşık 101 güne sıkışmış durumda (29. soruda tespit edilen kesintisiz seri).
+
+Gerçek bir sistemde bu hesap üç ayrı alarmı tetiklerdi: günlük sipariş sayısı eşiği, tek müşterinin ciro payı eşiği ve kesintisiz aktivite serisi. Kurumsal hesap, bayi veya otomasyon şüphesiyle bireysel müşteri analizlerinden ayrılması gerekir; aksi hâlde ortalama sepet, retention ve segmentasyon ölçülerinin tamamını tek başına kaydırır.
+
+İkinci gözlem, aylık lider listesinin neredeyse hiç değişmemesidir: 2025 Ekim'den 2026 Şubat'a kadar lider sürekli 13040, sonrasında 6754. Sağlıklı bir müşteri tabanında aylık en iyi müşteri listesi aydan aya belirgin şekilde değişir; sabit kalması tabanın dar olduğunu gösterir.
+
+**Metodolojik not:** Pareto eğrisi, müşteriler harcamaya göre azalan sıralanıp kümülatif ciro ve kümülatif müşteri sayısı birlikte hesaplanarak çıkarılır (`sum(harcama) OVER (ORDER BY harcama DESC)` ve `ROW_NUMBER() OVER (...)`). Ölçü yalnızca sipariş vermiş müşterileri kapsar; hiç sipariş vermemiş 1.715 kullanıcı dahil edilseydi yoğunlaşma daha yüksek görünürdü. Yoğunlaşma ölçüsünün paydası her zaman açıkça belirtilmelidir.
