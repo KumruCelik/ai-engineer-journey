@@ -641,3 +641,44 @@ while f.tell() < bitis:        # 20 milyon kez cagriliyor
 **Kural:** Sıcak döngüde her çağrının maliyetini satır sayısıyla çarparak düşün. Ve **optimizasyon paralellikten önce gelir** — yavaş bir iç döngüyü paralelleştirmek yavaşlığını gizler.
 
 ---
+
+## 41. Yeşil yanan ama hiçbir şeye bakmayan kontrol
+
+```makefile
+lint:
+	uv run mypy src        # ama asil kod scripts/ altinda
+```
+
+**Gerçek:** `Success: no issues found` — ve tek satır denetlenmedi. `perf-lab`'da tip denetimi, şablondan kalan altı satırlık `src/perf_lab/main.py`'ye bakıyordu; asıl iş `scripts/` içindeydi.
+**Neden tehlikeli:** Kontrol çalıştı, yeşil yandı, güven verdi. Ama kapsamı boştu.
+**Üç ayrı hâlini yaşadım:**
+- pytest `collected 1 item` — üç test `test_` ön eki olmadığı için hiç çalışmadı
+- `make lint`'te `ruff format --check` yoktu — biçim hiç denetlenmedi
+- `mypy src` — asıl kod denetim dışıydı
+
+**Kural:** Bir kontrol yeşil yandığında sorulacak ikinci soru: **"peki neye baktı?"** Çalıştığını görmek yetmiyor; kapsadığını da doğrula. Aynı soru `--cov=` hedefi için de geçerli.
+
+---
+
+## 42. Dosyayı bayta bölerken sınır satır başına denk gelirse satır kaybolur
+
+```python
+f.seek(baslangic)
+konum = baslangic + len(f.readline())   # "yarim satiri at"
+while konum < bitis:
+    ...
+```
+
+**Gerçek:** 100 satırlık dosya 37 parçaya bölününce 97 satır sayıldı. Üç satır kayboldu.
+**Neden:** Sınır tam olarak bir satırın **başına** denk gelirse önceki parça o satırı okumadan durur (`konum == bitis`), bu parça da "yarım satır var" sanıp atar. İkisi de okumaz.
+**Neden sinsi:** Girdiye bağlı. Satırlar ~40 baytken sınır başına ~1/40 ihtimal; 4 işçide %7, 37 işçide %60. Az işçiyle test edersen hiç görmezsin.
+**Kural:** Bir bayt geriden başla.
+```python
+f.seek(baslangic - 1)
+konum = baslangic - 1 + len(f.readline())
+```
+Sınır satırın ortasındaysa satırın kalanı yutulur (doğru); tam satır başındaysa yalnızca önceki satırın `\n` karakteri yutulur ve hiçbir satır kaybolmaz.
+
+**Yan ders:** Bu hatayı yayınlanmış ölçümlerden koruyan şey, dört yöntemin `toplam_kayit` değerini karşılaştıran çapraz kontroldü. **Elle yaptığın ve seni bir hatadan koruyan her kontrol, bir test adayıdır.**
+
+---
