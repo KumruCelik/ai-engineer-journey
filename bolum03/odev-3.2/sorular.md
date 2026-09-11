@@ -42,15 +42,15 @@ Durum: [ ] açık · [x] kapalı
 
 - [ ] 26 — Kohort retention tablosu: yeni kullanıcıların N. ay dönüş oranı. (zorunlu)
 - [ ] 27 — RFM segmentasyonu (NTILE ile). (zorunlu)
-- [ ] 28 — Ürün başına 7 günlük hareketli ortalama satış. (zorunlu)
-- [ ] 29 — Ardışık günlerde alışveriş yapan kullanıcı serileri (gaps-and-islands). (zorunlu)
-- [ ] 30 — Her kategoride ilk 3 ürün (ROW_NUMBER + PARTITION BY). (zorunlu)
-- [ ] 31 — Ay bazında büyüme oranı (LAG). (zorunlu)
+- [x] 28 — Ürün başına 7 günlük hareketli ortalama satış. (zorunlu)
+- [x] 29 — Ardışık günlerde alışveriş yapan kullanıcı serileri (gaps-and-islands). (zorunlu)
+- [x] 30 — Her kategoride ilk 3 ürün (ROW_NUMBER + PARTITION BY). (zorunlu)
+- [x] 31 — Ay bazında büyüme oranı (LAG). (zorunlu)
 - [ ] 32 — İlk sipariş ile ikinci sipariş arasındaki medyan süre. (zorunlu)
 - [ ] 33 — Aynı kullanıcının aynı ürünü tekrar alma oranı. (zorunlu)
 - [ ] 34 — Zaman içinde fiyat değişimi: SCD2 tablosundan geçerli fiyatı bulma. (zorunlu, Ödev 3.4'ten sonra)
 - [ ] 35 — Kullanıcı-ürün başına en son yorum (DISTINCT ON).
-- [ ] 36 — Kümülatif ciro seyri (SUM OVER).
+- [x] 36 — Kümülatif ciro seyri (SUM OVER).
 - [ ] 37 — Kategori ağacında bir kökün altındaki tüm ürünler (recursive CTE).
 - [ ] 38 — Her kullanıcının ilk siparişinde aldığı ürünler.
 - [ ] 39 — Kullanıcı başına sipariş aralıklarının ortalaması.

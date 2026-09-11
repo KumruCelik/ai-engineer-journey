@@ -850,3 +850,215 @@ Teslim süresi dağılımı da gerçekçi değil: minimum 1, maksimum 7 gün ve 
 Bu nedenle teslim performansı tek bir ortalamayla raporlanamaz. Doğru rapor iki sayıyı birlikte verir: teslim edilenlerin ortalama süresi **ve** teslim edilememe oranı. Bu sorguda ikisi bilerek yan yana konulmuştur.
 
 **Çapraz doğrulama:** `shipments` tablosunda 12.928 `in_transit`, 63.092 `delivered`, 1.979 `returned` kaydı var. `orders` tablosunda karşılıkları sırasıyla 12.933, 63.110 ve 1.979. Farklar 5 + 18 + 0 = 23 ve bu, `seed/checks.sql` ikinci kontrolünün bulduğu "kargo kaydı olmayan sipariş" sayısıyla birebir aynı. Üreticiye bilerek yerleştirilen anomali, bağımsız bir sorguda aynı sayıyla doğrulanmış oldu.
+
+---
+
+## 30 — Her kategoride ciro bazında ilk 3 ürün
+
+**SQL:** `sql-mastery/queries/q30_kategoride_ilk3_urun.sql`
+**Kapsam:** `paid`, `shipped`, `delivered` siparişler. 32 yaprak kategori × 3 = 96 satır.
+
+**Sonuç (seçilmiş satırlar):**
+
+```
+       kategori        | sira |    sku    | adet  |    ciro    | kategori_icindeki_pay
+-----------------------+------+-----------+-------+------------+-----------------------
+ Kitap Premium         |    1 | SKU-00186 | 10010 | 2693709.88 |                 91.80
+ Kitap Premium         |    2 | SKU-00043 |   710 |   74839.92 |                  2.55
+ Giyim Temel           |    1 | SKU-00470 |  1509 |  390285.35 |                 68.18
+ Bebek Premium         |    1 | SKU-01239 |  2279 |  317774.47 |                 60.84
+ Kirtasiye Aksesuar    |    1 | SKU-00169 | 31430 |  993796.20 |                 57.47
+ Mutfak Yeni Sezon     |    1 | SKU-01088 |   931 |  496179.87 |                 49.97
+ Mutfak Yeni Sezon     |    2 | SKU-01604 |  4817 |  144386.19 |                 14.54
+```
+
+**ROW_NUMBER / RANK / DENSE_RANK karşılaştırması:**
+
+```
+ kategori | urun_sayisi | row_number | rank | dense_rank
+----------+-------------+------------+------+------------
+       27 |          66 |         11 |   10 |         10
+       33 |          66 |         10 |   10 |         10
+       24 |          65 |         12 |   12 |         11
+       10 |          64 |         14 |   13 |         12
+       25 |          64 |         15 |   13 |         12
+       37 |          64 |         13 |   13 |         12
+```
+
+**İş yorumu:**
+
+Kategori içi ciro yoğunlaşması aşırı düzeyde. `Kitap Premium` kategorisinde tek bir ürün (SKU-00186) kategori cirosunun %91,80'ini üretiyor; `Giyim Temel`'de %68,18, `Bebek Premium`'da %60,84, `Kirtasiye Aksesuar`'da %57,47. Gerçek bir perakende operasyonunda tek bir SKU'nun kategori cirosunun %90'ını oluşturması, kategori tanımının anlamsız olduğunu veya ürün yelpazesinin çöktüğünü gösterir; kategori bazlı stok ve kampanya kararları bu durumda tek ürüne bağımlı hâle gelir ve o ürünün tedarikinde yaşanacak bir sorun tüm kategoriyi durdurur. Kategori sağlığı ölçüsü olarak "ilk ürünün kategori içindeki payı" izlenmelidir.
+
+Kategori içinde de adet ve ciro sıralamaları ayrışıyor: `Mutfak Yeni Sezon` kategorisinde ciro lideri 931 adet satan SKU-01088, ikinci sırada ise 4.817 adet satan SKU-01604 bulunuyor. Ölçü değiştiğinde kategori liderinin de değiştiği, 14-15. sorularda katalog geneli için tespit edilen bulgunun kategori seviyesindeki karşılığıdır.
+
+**Metodolojik not — window function ile GROUP BY farkı:** `GROUP BY` satırları birleştirip her grup için tek satır üretir; gruplanan kolonlar dışındaki satır bilgisi kaybolur. Window function satırları korur ve her satırın yanına, ait olduğu pencerede hesaplanmış bir kolon ekler. "Bu ürün kendi kategorisinin ortalamasının ne kadar üstünde" gibi sorular yalnızca window function ile cevaplanabilir.
+
+**Metodolojik not — sıralama fonksiyonlarının farkı:** `ROW_NUMBER` eşit değerlere farklı numara verir, `RANK` aynı numarayı verip sonraki numarayı atlar (10, 10, 12), `DENSE_RANK` aynı numarayı verir ve atlamaz (10, 10, 11). Liste üretiliyorsa (ilk N, sayfalama) `ROW_NUMBER`, derece belirtiliyorsa `RANK` veya `DENSE_RANK` uygundur.
+
+**Metodolojik not — determinizm:** `ROW_NUMBER` eşit değerler arasında numarayı keyfî dağıtır. Çıktıda 66 ürünlü iki kategoriden birine 10, diğerine 11 verilmiş ve bu dağılım dış sıralamayla uyumlu değil. `OVER (ORDER BY ...)` içinde eşitliği kıran benzersiz bir kolon (burada `id`) eklenmezse aynı sorgu farklı çalıştırmalarda farklı sonuç üretebilir. "İlk N" raporlarında bu, listenin gün gün değişmesi anlamına gelir.
+
+**Metodolojik not — işleme sırası:** Window function'lar `WHERE` ve `HAVING`'den sonra hesaplanır, dolayısıyla bu iki yan tümcede kullanılamaz. `sira <= 3` filtresi bu yüzden bir CTE katmanı sonrasında uygulanmıştır. Güncel işleme sırası: `FROM → WHERE → GROUP BY → HAVING → WINDOW → SELECT → DISTINCT → ORDER BY → LIMIT`.
+
+---
+
+## 31 — Ay bazında büyüme oranı
+
+**SQL:** `sql-mastery/queries/q31_aylik_buyume.sql`
+**Kapsam:** `paid`, `shipped`, `delivered` siparişler. 30 ay.
+
+**Sonuç (seçilmiş satırlar):**
+
+```
+     ay     | siparis |    ciro    | aylik_buyume_yuzde | yillik_buyume_yuzde
+------------+---------+------------+--------------------+---------------------
+ 2024-01-01 |      39 |    9458.33 |                    |
+ 2024-11-01 |    2429 |  566575.01 |             139.30 |
+ 2024-12-01 |    2782 |  635825.34 |              12.22 |
+ 2025-01-01 |     982 |  215656.58 |             -66.08 |             2180.07
+ 2025-11-01 |    8249 | 1924674.29 |             145.06 |              239.70
+ 2025-12-01 |    9393 | 2178078.90 |              13.17 |              242.56
+ 2026-01-01 |    3337 |  758323.81 |             -65.18 |              251.63
+ 2026-06-01 |    8161 | 1858790.59 |              12.23 |              203.50
+```
+
+**İş yorumu:**
+
+Aylık büyüme oranı mevsimsellik nedeniyle tek başına yorumlanamaz. Kasım aylarında %139–145, aralıkta %12–13 artış, ocakta ise %65–66 düşüş görülüyor ve bu örüntü iki yıl üst üste neredeyse aynı oranlarla tekrarlanıyor. Ocak ayındaki düşüş bir iş sorunu değil, kasım-aralık kampanya döneminin doğal sonucudur. Aylık büyümeye bakan bir rapor her ocak ayında yanlış alarm, her kasım ayında yanlış kutlama üretir.
+
+Mevsimselliği olan bir işte doğru karşılaştırma geçen yılın aynı ayıdır. 2026 Ocak için yıllık büyüme %251,63'tür; yani aylık bazda %65 düşüş görünen ay, yıllık bazda güçlü büyüme göstermektedir. Aynı veri, farklı referans noktası, zıt sonuç.
+
+Yıllık karşılaştırmanın kendisi de dikkatli okunmalı: 2025 Ocak için yıllık büyüme %2.180 çıkıyor, çünkü 2024 Ocak'ta yalnızca 39 sipariş vardı. Küçük tabandan hesaplanan yüzde değişim anlamsızdır ve mutlak farkla birlikte raporlanmalıdır — buradaki %2.180'in karşılığı 206 bin TL'dir. Ayrıca yıllık büyüme oranlarının %200'ün üzerinde seyretmesi, 09. soruda tespit edilen taban büyümesi etkisini yansıtıyor: hacim artışının önemli kısmı talep artışından değil, sipariş verebilir kullanıcı sayısının artmasından geliyor.
+
+**Metodolojik not — `LAG`:** `LAG(kolon) OVER (ORDER BY ay)` pencere sırasındaki bir önceki satırın değerini getirir; `LAG(kolon, 12)` on iki satır öncesini getirir. İlk satırların öncesi bulunmadığı için sonuç `NULL`'dur ve bu doğru davranıştır — bilinmeyen bir değer sıfır büyüme olarak raporlanmamalıdır. Window function'lardan önce aynı iş tablonun kendisiyle birleştirilmesiyle yapılırdı; bu yöntem dönem atlamalarında sessizce bozulur.
+
+---
+
+## 36 — Kümülatif ciro seyri
+
+**SQL:** `sql-mastery/queries/q36_kumulatif_ciro.sql`
+
+**Sonuç (seçilmiş satırlar):**
+
+```
+     ay     |    ciro    | kumulatif_ciro | toplamin_yuzdesi | o_yilin_ay_ortalamasi
+------------+------------+----------------+------------------+-----------------------
+ 2024-01-01 |    9458.33 |        9458.33 |             0.05 |             195594.48
+ 2024-12-01 |  635825.34 |     2347133.74 |            11.90 |             195594.48
+ 2025-12-01 | 2178078.90 |    11655289.80 |            59.09 |             775679.67
+ 2026-06-01 | 1858790.59 |    19724818.08 |           100.00 |            1344921.38
+```
+
+**İş yorumu:**
+
+Toplam cironun yarısına ancak 2025 Aralık'ta ulaşılıyor; 30 aylık dönemin gelirinin yarısı son yedi ayda elde edilmiş. Yıllık ay ortalamaları 195.594 → 775.679 → 1.344.921 TL şeklinde ilerliyor (dört kat, ardından 1,7 kat artış). 2024 yılının tamamı toplam cironun yalnızca %11,90'ını oluştururken, 2026'nın ilk altı ayı %40,9'unu oluşturuyor.
+
+Kümülatif eğri "gelirin ne zaman kazanıldığı" sorusunun standart gösterimidir; yukarı doğru bükülmesi hızlanma, düzleşmesi durgunluk anlamına gelir. Buradaki hızlanmanın önemli kısmı, 09. soruda tespit edildiği gibi sipariş verebilir kullanıcı sayısının artmasından kaynaklanıyor; talep artışı olarak okunmamalıdır.
+
+**Metodolojik not — pencere çerçevesi:** `OVER` içinde `ORDER BY` bulunduğunda varsayılan çerçeve `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`'dur, yani hesap pencerenin başından mevcut satıra kadar yapılır; `SUM(x) OVER (ORDER BY ay)` bu nedenle kümülatif toplam üretir. `ORDER BY` yazılmadığında çerçeve tüm bölümdür: `SUM(x) OVER ()` genel toplamı, `SUM(x) OVER (PARTITION BY yil)` yıl toplamını verir. Aynı fonksiyon, yalnızca pencere tanımı değiştiği için üç farklı sonuç üretir.
+
+**Çapraz doğrulama:** Genel toplam 19.724.818,08 TL, 13. soruda hesaplanan kategori bazlı ciro toplamıyla birebir aynıdır.
+
+---
+
+## 28 — Ürün başına 7 günlük hareketli ortalama satış
+
+**SQL:** `sql-mastery/queries/q28_hareketli_ortalama.sql`
+**Kapsam:** `paid`, `shipped`, `delivered` siparişler. Örnek ürünler: 169 (yoğun), 1488 (seyrek).
+
+**Sonuç — `ROWS` ve `RANGE` farkı:**
+
+```
+ gun        | adet | pencere_satir | ma7_rows | pencere_gun | ma7_range
+------------+------+---------------+----------+-------------+-----------
+ 2024-01-27 |    1 |             6 |     1.83 |           2 |      1.50
+ 2024-01-31 |    5 |             7 |     2.29 |           2 |      3.00
+ 2024-02-03 |    2 |             7 |     2.29 |           2 |      3.50
+```
+
+**Sonuç — seyrek ürünün satış günleri:**
+
+```
+ satisli_gun_sayisi | ilk_satis  | son_satis  | kapsanan_gun | satisli_gun_yuzdesi
+--------------------+------------+------------+--------------+---------------------
+                237 | 2024-02-03 | 2026-06-29 |          877 |               26.99
+```
+
+**Sonuç — boş günler sıfırla doldurulmuş doğru hareketli ortalama (ürün 1488):**
+
+```
+    gun     | adet | ma7_dogru
+------------+------+-----------
+ 2026-01-05 |    3 |     1.000
+ 2026-01-15 |    0 |     0.143
+ 2026-01-19 |    3 |     0.429
+ 2026-01-30 |    0 |     0.143
+```
+
+**İş yorumu:**
+
+Yavaş dönen ürünlerde hareketli ortalama, satmayan günler hesaba katılmadığında talebi sistematik olarak abartır. Ürün 1488 için 877 günlük dönemde 529 adet satılmış, yani gerçek günlük ortalama 0,60 adettir. Yalnızca satış gerçekleşen 237 gün üzerinden hesaplandığında ortalama 2,23 adete çıkıyor — 3,7 kat abartı. Oran tam olarak satışlı gün yüzdesinin tersidir (1 / 0,2699).
+
+Bunun stok planlamasındaki karşılığı doğrudan maliyettir: "günlük ortalama 2,23" varsayımıyla 30 günlük stok için 67 adet sipariş edilirse, gerçekte 18 adet satılacak ve 49 adet rafta kalacaktır. Yavaş dönen ürünlerde talep tahmini mutlaka eksiksiz takvim üzerinden yapılmalıdır.
+
+**Metodolojik not — `ROWS` ile `RANGE` farkı:** `ROWS BETWEEN 6 PRECEDING AND CURRENT ROW` satır sayar; ürünün satılmadığı günlerde tabloda satır bulunmadığı için pencere takvimde çok daha geniş bir aralığa yayılabilir. Çıktıda 7 satırlık pencerenin 18 güne yayıldığı görülüyor. `RANGE BETWEEN INTERVAL '6 days' PRECEDING AND CURRENT ROW` tarih aralığına bakar ve gerçekten 7 günlük pencere kurar, ancak yine yalnızca satış olan günleri ortalar.
+
+Üçüncü ve doğru yöntem, `generate_series` ile eksiksiz bir tarih omurgası üretip satışları `LEFT JOIN` ile bağlamak ve boş günleri `COALESCE(adet, 0)` ile sıfırlamaktır. Üç yöntem üç farklı şey ölçer:
+- `ROWS` → son 7 satışlı günün ortalaması (takvimde belirsiz aralık)
+- `RANGE` → son 7 gün içindeki satışlı günlerin ortalaması
+- Sıfır doldurmalı → son 7 günün ortalama günlük satışı (gerçek hareketli ortalama)
+
+**Metodolojik not — `WINDOW` yan tümcesi:** Aynı pencere tanımı birden çok kolonda kullanılacaksa `WINDOW ad AS (...)` ile bir kez tanımlanıp `OVER ad` şeklinde kullanılabilir. Yan tümce `HAVING` ile `ORDER BY` arasına yazılır.
+
+---
+
+## 29 — Ardışık günlerde alışveriş yapan kullanıcı serileri (gaps and islands)
+
+**SQL:** `sql-mastery/queries/q29_ardisik_gun_serileri.sql`
+**Kapsam:** `paid`, `shipped`, `delivered` siparişler.
+
+**Yöntem:** Her kullanıcının alışveriş yaptığı günler sıralanıp numaralandırılır; `gün − sıra_numarası` ardışık günlerde sabit kalır, gün atlandığında değişir. Bu fark "ada anahtarı" olarak kullanılıp `GROUP BY kullanıcı, ada_anahtarı` ile her seri tek satıra indirilir.
+
+**Sonuç — numaranın çalışması:**
+
+```
+ user_id |    gun     | sira | ada_anahtari
+---------+------------+------+--------------
+    6754 | 2026-03-21 |    1 | 2026-03-20
+    6754 | 2026-03-22 |    2 | 2026-03-20
+    6754 | 2026-03-23 |    3 | 2026-03-20
+```
+
+**Sonuç — seri uzunluğu dağılımı:**
+
+```
+ seri_uzunlugu | seri_sayisi | kullanici_sayisi | yuzde
+---------------+-------------+------------------+-------
+             1 |       71551 |            17701 | 95.32
+             2 |        2677 |             1126 |  3.57
+             3 |         497 |              183 |  0.66
+             4 |         163 |               63 |  0.22
+             5 |          69 |               39 |  0.09
+           ... |         ... |              ... |   ...
+           101 |           1 |                1 |  0.00
+```
+
+**Sonuç — en uzun seriler:**
+
+```
+ user_id | baslangic  |   bitis    | uzunluk
+---------+------------+------------+---------
+    6754 | 2026-03-21 | 2026-06-29 |     101
+   16900 | 2026-04-16 | 2026-05-27 |      42
+   16900 | 2026-05-29 | 2026-06-29 |      32
+   13040 | 2025-11-22 | 2025-12-22 |      31
+```
+
+**İş yorumu:**
+
+Alışveriş serilerinin %95,32'si tek günlüktür; kullanıcılar ardışık günlerde alışveriş yapma eğilimi göstermiyor. Perakende için beklenen bir sonuçtur ve "günlük alışkanlık" oluşturan bir ürün kategorisi bulunmadığını gösterir.
+
+Dağılımın ucundaki değerler ise operasyonel olarak incelenmesi gereken işaretlerdir. Kullanıcı 6754, 2026-03-21 ile 2026-06-29 arasında **101 gün boyunca tek bir gün atlamadan** alışveriş yapmış. Gerçek bir sistemde kesintisiz üç aylık alışveriş serisi bireysel müşteri davranışı değildir; kurumsal hesap, bayi veya otomatik sipariş veren bir entegrasyon işaretidir ve müşteri segmentasyonundan ayrı ele alınması gerekir. Bu veri setinde kaynak, 11. soruda tespit edilen aşırı yoğunlaştırıcı güç yasasıdır: günde ortalama iki sipariş veren bir hesabın her gün alışveriş yapıyor görünmesi kaçınılmazdır. Aynı üretici kusuru üçüncü kez, üçüncü farklı sorguda ortaya çıkıyor.
+
+En uzun serilerin 2025 sonu ve 2026'ya yığılması, 09. soruda tespit edilen taban büyümesi etkisinin sonucudur; sipariş yoğunluğu arttıkça ardışık gün olasılığı da artar. Seri uzunluğu ölçüsü dönemler arası karşılaştırmada bu nedenle doğrudan kullanılamaz.
+
+**Metodolojik not — gaps and islands:** Ardışıklık sorguları, sıralı bir değerden satır numarasının çıkarılmasıyla çözülür. Her iki değer de birer birer arttığı için fark ardışık satırlarda sabit kalır; boşlukta sıçrar. Bu fark grup anahtarı olarak kullanılır. Aynı kalıp tarih serileri, kesintisiz oturumlar, ardışık kazanma serileri ve durum değişmeyen dönemler gibi tüm "kesintisiz aralık" problemlerine uygulanır.
