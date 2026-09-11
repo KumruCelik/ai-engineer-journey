@@ -9,7 +9,7 @@ Kod çıktıları ayrı repolarda tutuluyor; bu repo yazılı kısmın evi.
 ## Yapı
 
 ```
-weekNN/
+bolumNN/
 ├── notes/      haftalık notlar, kontrol soruları, retro
 ├── research/   araştırma yazıları
 └── data/       veri kaynakları (dosyalar gitignore'da, sadece README)
@@ -21,7 +21,7 @@ weekNN/
 |---|---|---|---|
 | 1 | Ortam, araçlar, mühendislik hijyeni | [dev-setup](https://github.com/KumruCelik/dev-setup) · [fastapi-docker](https://github.com/KumruCelik/fastapi-docker) | ✅ |
 | 2–4 | Python & yazılım mühendisliği disiplini | [py-core](https://github.com/KumruCelik/py-core),  [mini-etl](https://github.com/KumruCelik/mini-etl), [perf-lab](https://github.com/KumruCelik/perf-lab) | ✅  |
-| 4–6 | SQL & veri modelleme | sql-mastery | ⬜ |
+| 4–6 | SQL & veri modelleme | [sql-mastery](https://github.com/KumruCelik/sql-mastery) | ✅ |
 | 6–9 | Lineer cebir | linalg-from-scratch | ⬜ |
 | 9–11 | Kalkülüs & optimizasyon | microautograd | ⬜ |
 | 11–15 | Olasılık & istatistik | stat-lab, ab-test-kit | ⬜ |
@@ -75,6 +75,51 @@ weekNN/
 - [DESIGN.md](https://github.com/KumruCelik/mini-etl/blob/main/DESIGN.md) —
   sekiz tasarım kararı, her biri reddedilen alternatifi ve gerekçesiyle;
   uygulama sonrası sapmalar ve bilinen sınırlar
+
+## Bölüm 3 çıktıları
+
+Sıfırdan kurulan bir e-ticaret OLTP şeması, 685.966 satırlık sentetik veri,
+50 iş sorusu, performans laboratuvarı, SCD2'li star schema ve DuckDB ile
+dosya analitiği. Kod: [sql-mastery](https://github.com/KumruCelik/sql-mastery)
+
+**Araştırma yazıları**
+
+- [OLTP vs OLAP: satır bazlı ve kolon bazlı depolama](bolum03/research/01_oltp_vs_olap_depolama.md)
+  — aynı 168.920 satır: PostgreSQL 77 MB ve 75,9 ms, Parquet 5,5 MB ve 13 ms;
+  2,96 milyon satırda DuckDB 148,9 ms / 171,7 MB, pandas 2.796,4 ms / 1.336,9 MB
+- [SCD Type 2 ve ML'de veri sızıntısı](bolum03/research/02_scd2_ve_ml_leakage.md)
+  — aynı dört sipariş, star katmanında `TR`, OLTP'de `DE`; zaman noktası
+  doğruluğunun neden şema meselesi olduğu
+
+**Notlar**
+
+- [Ödev 3.2 — 50 iş sorusu ve cevapları](bolum03/notes/odev-3.2/cevaplar.md)
+  — her soru için SQL, sonuç ve bir paragraf iş yorumu
+  ([soru listesi](bolum03/notes/odev-3.2/sorular.md))
+- [Ödev 3.3 — performans laboratuvarı](bolum03/notes/odev-3.3/olcumler.md)
+  — beş yavaş sorgu 226×, 508×, 63×, 3,1× ve 35× hızlandırıldı;
+  index'in işe yaramadığı dört durum belgelendi
+- [Ödev 3.4 — star schema ve SCD2](bolum03/notes/odev-3.4/karsilastirma.md)
+  — 10 iş sorusunun OLTP/star karşılaştırması, idempotent yükleme, SCD2 testi
+- [Ödev 3.5 — DuckDB dosya analitiği](bolum03/notes/odev-3.5/duckdb_analizi.md)
+  — NYC taksi verisinde 10 sorgu ve pandas karşılaştırması
+- [Kontrol soruları](bolum03/notes/kontrol_sorulari.md) — `NOT IN` ve `NULL`,
+  fan-out teşhisi, window function ile `GROUP BY` farkı, index'in maliyeti
+
+**Tahmin tutmadığı için bulunanlar**
+
+Bu bölümde üç gerçek hata, yalnızca beklenen değer önceden yazıldığı için
+ortaya çıktı:
+
+- Sipariş başına kalem sayısı 1,98 olmalıydı, 1,689 çıktı → veri üreticisinde
+  döngü koşulu her turda yeniden rastgele çekiyordu
+- 164 siparişte ödeme, sepet eksi indirime eşit değildi → iki kuponun üst üste
+  binmesi sipariş tutarını sıfıra indiriyordu (gelir sızıntısı)
+- İlk sipariş sayısı 17.719 olmalıydı, 29.991 çıktı → kendi sorgumda fan-out
+
+Bir de ölçüm iki kez beklentiyi çürüttü: index'lenmiş "kötü" sorgu, yeniden
+yazılmış sorgudan hızlı çıktı (seçicilik yüksek olduğunda); ve `work_mem`
+artırmak sorguyu yavaşlattı (planlayıcı daha kötü bir plan seçti).
 
 ## Çalışma yöntemi
 
