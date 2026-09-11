@@ -48,7 +48,7 @@ Durum: [ ] açık · [x] kapalı
 - [x] 31 — Ay bazında büyüme oranı (LAG). (zorunlu)
 - [x] 32 — İlk sipariş ile ikinci sipariş arasındaki medyan süre. (zorunlu)
 - [x] 33 — Aynı kullanıcının aynı ürünü tekrar alma oranı. (zorunlu)
-- [ ] 34 — Zaman içinde fiyat değişimi: SCD2 tablosundan geçerli fiyatı bulma. (zorunlu, Ödev 3.4'ten sonra)
+- [x] 34 — Zaman içinde fiyat değişimi: SCD2 tablosundan geçerli fiyatı bulma. (zorunlu, Ödev 3.4'ten sonra)
 - [x] 35 — Kullanıcı-ürün başına en son yorum (DISTINCT ON).
 - [x] 36 — Kümülatif ciro seyri (SUM OVER).
 - [x] 37 — Kategori ağacında bir kökün altındaki tüm ürünler (recursive CTE).

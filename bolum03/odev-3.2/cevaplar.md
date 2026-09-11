@@ -1501,3 +1501,53 @@ Ayrıca bu kural tek satırlık `CHECK` kısıtıyla ifade edilemez, çünkü bi
 - Sipariş seviyesinde toplam indirim üst sınırı uygulanmalı (sepetin en fazla %50'si).
 - Alım hareketleri satışlardan önce ve talebi karşılayacak hacimde üretilmeli.
 - Satış fiyatı, liste fiyatının üzerine de çıkabilmeli (fiyat artışı senaryosu).
+
+---
+
+## 34 — Zaman içinde fiyat değişimi: SCD2 tablosundan geçerli fiyatı bulma
+
+**SQL:** `sql-mastery/queries/q34_scd2_gecerli_fiyat.sql`
+**Şema:** `sql-mastery/migrations/009_dim_product_price.sql`, yükleyici `sql-mastery/star/load_price_scd2.sql`
+
+**Tasarım:** `star.dim_product` SCD1 olarak bırakıldı; fiyat ve maliyet için ayrı bir SCD2 **mini-boyut** açıldı (`star.dim_product_price`). Mini-boyut, hızlı değişen birkaç kolonu ana boyuttan ayırma kalıbıdır; ana boyutun her fiyat değişiminde sürümlenmesini önler.
+**Grain:** bir satır = bir ürünün bir fiyat geçerlilik dönemi.
+
+**Test:** Ürün 169'un liste fiyatı OLTP'de %25 artırıldı ve yükleyici tekrar çalıştırıldı.
+
+```
+ price_sk | product_id | list_price |          valid_from           |           valid_to            | is_current
+----------+------------+------------+-------------------------------+-------------------------------+------------
+      207 |        169 |      34.19 | -infinity                     | 2026-09-11 14:08:52.871699+00 | f
+     2001 |        169 |      42.74 | 2026-09-11 14:08:52.871699+00 |                               | t
+```
+
+**As-of sorgusu — belirli bir tarihte geçerli fiyat:**
+
+```
+             tarih             | o_tarihte_gecerli_fiyat | surum_guncel_mi
+-------------------------------+-------------------------+-----------------
+ 2025-06-30                    |                   34.19 | f
+ 2026-01-15                    |                   34.19 | f
+ 2026-09-11 (simdi)            |                   42.74 | t
+```
+
+Kalıp: `WHERE tarih >= valid_from AND tarih < COALESCE(valid_to, 'infinity')`. Dönem sınırları sol kapalı–sağ açık (`[valid_from, valid_to)`) seçilmiştir; bu, iki sürümün sınır anında çakışmasını engeller.
+
+**İş yorumu — "hangi fiyat" sorusunun tek cevabı yoktur.**
+
+Aynı sipariş kalemi için üç farklı fiyat ölçüsü elde ediliyor:
+
+```
+ siparis_tarihi | snapshot_order_items | scd2_o_tarihteki_liste | oltp_bugunku_liste
+----------------+----------------------+------------------------+--------------------
+ 2026-06-29     |                33.61 |                  34.19 |              42.74
+ 2026-06-29     |                33.03 |                  34.19 |              42.74
+```
+
+- **Ödenen fiyat** (`order_items.unit_price`, K-002 snapshot'ı) — ciro ve marj hesapları bunu kullanır.
+- **O tarihteki liste fiyatı** (SCD2) — indirim oranı analizi bunu gerektirir: ödenen/liste oranı gerçek indirim yüzdesidir.
+- **Bugünkü liste fiyatı** (OLTP) — yalnızca güncel fiyatlama kararları için geçerlidir; geçmiş raporlarda kullanılması hatadır.
+
+Üç ölçü de meşrudur ve farklı sorulara hizmet eder. Bir raporda "fiyat" kolonu görüldüğünde hangisinin kullanıldığı yazılı olmalıdır; aksi hâlde indirim analizi, ciro raporu ve fiyatlama kararı birbirinin sayılarıyla yapılır.
+
+**Tutarlılık:** Her ürünün tam olarak bir güncel fiyat sürümü bulunuyor (0 ihlal); kısmi benzersiz index bunu veritabanı seviyesinde garanti ediyor.
