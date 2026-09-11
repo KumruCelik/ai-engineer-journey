@@ -9,7 +9,7 @@ Durum: [ ] açık · [x] kapalı
 
 ## A. Seviye 1 — tek tablo, filtre ve hesap
 
-- [ ] 01 — Hesabı kapalı (`is_active = false`) kullanıcılar kimler?
+- [x] 01 — Hesabı kapalı (`is_active = false`) kullanıcılar kimler?
 - [ ] 02 — Ülkesi bilinmeyen kullanıcı sayısı kaç? (NULL sayma tuzağı)
 - [ ] 03 — Liste fiyatı 500'ün üzerindeki ürünler, pahalıdan ucuza.
 - [ ] 04 — Her ürünün marjı ve marj yüzdesi nedir?
