@@ -1332,3 +1332,172 @@ Gerçek bir sistemde bu hesap üç ayrı alarmı tetiklerdi: günlük sipariş s
 İkinci gözlem, aylık lider listesinin neredeyse hiç değişmemesidir: 2025 Ekim'den 2026 Şubat'a kadar lider sürekli 13040, sonrasında 6754. Sağlıklı bir müşteri tabanında aylık en iyi müşteri listesi aydan aya belirgin şekilde değişir; sabit kalması tabanın dar olduğunu gösterir.
 
 **Metodolojik not:** Pareto eğrisi, müşteriler harcamaya göre azalan sıralanıp kümülatif ciro ve kümülatif müşteri sayısı birlikte hesaplanarak çıkarılır (`sum(harcama) OVER (ORDER BY harcama DESC)` ve `ROW_NUMBER() OVER (...)`). Ölçü yalnızca sipariş vermiş müşterileri kapsar; hiç sipariş vermemiş 1.715 kullanıcı dahil edilseydi yoğunlaşma daha yüksek görünürdü. Yoğunlaşma ölçüsünün paydası her zaman açıkça belirtilmelidir.
+
+---
+
+## 38 — Her kullanıcının ilk siparişinde aldığı ürünler (kapı ürünleri)
+
+**SQL:** `sql-mastery/queries/q38_kapi_urunleri.sql`
+**İş sorusu:** Hangi ürünler yeni müşteri getiriyor? Ölçü: bir ürünü alanların yüzde kaçı onu ilk siparişinde almış.
+
+**Sonuç:**
+
+```
+  id  |    sku    | list_price | toplam_alan | ilk_sipariste_alan | kapi_orani
+------+-----------+------------+-------------+--------------------+------------
+  169 | SKU-00169 |      34.19 |       10075 |               4658 |      46.23
+  118 | SKU-00118 |      29.57 |        6427 |               2308 |      35.91
+  186 | SKU-00186 |     290.86 |        4666 |               1480 |      31.72
+ 1573 | SKU-01573 |      53.65 |        3692 |               1155 |      31.28
+ 1604 | SKU-01604 |      32.38 |        2591 |                743 |      28.68
+
+ ilk_siparis_sayisi | ort_kalem_dogru | ort_kalem_yanli | farkli_urun
+--------------------+-----------------+-----------------+-------------
+              17719 |           1.693 |           2.016 |        1802
+```
+
+**İş yorumu:**
+
+Kapı ürünü ölçüsü, bir ürünün ciro değil **müşteri** üretip üretmediğini gösterir. Çok satan ama hep mevcut müşteriye satan bir ürün gelir kaynağıdır; az satan ama alanların çoğunun siteye o ürün için ilk kez geldiği bir ürün ise kazanım kanalıdır ve pazarlama bütçesi farklı kurulmalıdır.
+
+Bu veride kapı oranı sıralaması yine popülerlik sıralamasıyla aynı (SKU-00169 %46,23 ile başta). Mekanik bir sonuç: ürün her sepette bağımsız olarak aynı olasılıkla seçildiği için popüler ürünün ilk siparişte de yer alma olasılığı yüksektir. Ürün düzeyinde "giriş ürünü olma" diye bir özellik veride üretilmemiştir. Gerçek veride bu ölçü popülerlikten ayrışır ve giriş ürünleri ile tekrar ürünleri belirgin şekilde farklı çıkar.
+
+İlk siparişlerde 1.802 farklı ürün yer almış (katalogun %90'ı) ve ilk sipariş ortalama 1,693 kalem içeriyor — bu değer genel sipariş ortalamasıyla (1,689) aynı, yani ilk siparişler diğerlerinden farklı davranmıyor.
+
+**Metodolojik not — boyut yanlılığı (size-biased sampling):** İlk sürümde `count(*)` ve `avg(kalem)` hesapları `order_items` ile birleştirilmiş satırlar üzerinden yapıldığı için sipariş sayısı 17.719 yerine 29.991 çıktı (fan-out), ortalama kalem sayısı ise 1,693 yerine 2,016 hesaplandı. Sapma rastgele değildir: çok kalemli siparişler sonuçta daha çok satırla temsil edildiği için ortalamayı kendilerine doğru çeker.
+
+Aynı yanlılık gerçek hayatta yaygındır — otobüs bekleyenlere sorulan "kaç dakikada bir geliyor" sorusu gerçek ortalamadan yüksek cevap verir, çünkü uzun aralıklarda daha çok kişi beklemektedir; sınıf mevcudu öğrencilere sorulduğunda okul ortalamasından yüksek çıkar. Kural: ortalama alınacak birim (sipariş, müşteri, gün) önce tek satıra indirgenmeli, ortalama ondan sonra alınmalıdır.
+
+---
+
+## 39 ve 45 — Sipariş ritmi ve terk oranı
+
+**SQL:** `sql-mastery/queries/q39_q45_siparis_ritmi_ve_terk.sql`
+**Kapsam:** `paid`, `shipped`, `delivered` siparişler.
+
+**Sonuç:**
+
+```
+ musteri | ortalamalarin_ortalamasi | medyan_musteri_ritmi | medyan_aralik_ham
+---------+--------------------------+----------------------+-------------------
+   13551 |                   111.18 |                78.82 |             18.03
+
+ musteri | terk_sabit_90 | terk_sabit_yuzde | terk_kisiye_ozel | terk_kisiye_ozel_yuzde | tek_siparisli
+---------+---------------+------------------+------------------+------------------------+---------------
+   17719 |          8814 |            49.74 |             3312 |                  18.69 |          4168
+```
+
+**İş yorumu:**
+
+**Analiz birimi seçimi sonucu dört kat değiştiriyor.** Tüm sipariş aralıklarının medyanı 18,03 gün, müşteri başına ortalama aralıkların medyanı ise 78,82 gündür. Fark, sık alışveriş yapan müşterilerin çok sayıda aralık üretmesinden kaynaklanıyor: ham aralık dağılımı yüksek frekanslı müşteriler tarafından domine ediliyor, müşteri bazlı hesap ise her müşteriye eşit ağırlık veriyor.
+
+İkisi farklı sorulara cevap verir. "İki sipariş arasında tipik olarak ne kadar geçiyor" sorusunun cevabı 18 gündür (operasyonel planlama için doğru ölçü). "Tipik bir müşteri ne sıklıkla alışveriş yapıyor" sorusunun cevabı 79 gündür (pazarlama iletişimi için doğru ölçü). Raporda hangi birimin kullanıldığı yazılmadan bu sayılar anlamsızdır.
+
+**Sabit eşikli terk tanımı terk oranını iki buçuk kat abartıyor.** 90 günlük sabit eşik müşterilerin %49,74'ünü terk etmiş sayıyor; her müşterinin kendi ortalama sipariş aralığının iki katını eşik alan tanım ise %18,69 buluyor. 32. soruda medyan geri dönüş süresinin 67 gün, 75. yüzdeliğin 156 gün olduğu tespit edilmişti — yani 90 gün, müşterilerin dörtte birinden fazlası için hâlâ normal bekleme süresidir. Sabit eşik, ayda bir alışveriş yapan müşteri ile yılda bir alışveriş yapan müşteriyi aynı kefeye koyar ve geri kazanım kampanyalarının hedef listesini gereksiz yere şişirir.
+
+**Her iki ölçü de eksiktir ve bu açıkça belirtilmelidir.** Tek sipariş vermiş 4.168 müşteri için sipariş aralığı tanımsızdır; kişiye özel eşik bu müşterileri hiçbir zaman terk etmiş saymaz, dolayısıyla %18,69 oranı alt sınırdır. Doğru raporlama bu grubu ayrı bir kategori olarak gösterir: "hiç tekrar etmemiş" ile "tekrar edip sonra uzaklaşmış" farklı olgulardır ve farklı müdahale gerektirir.
+
+---
+
+## 40, 42 ve 43 — Sepet birlikteliği, LTV ve stok seyri
+
+**SQL:** `sql-mastery/queries/q40_q42_q43.sql`
+**Kapsam:** `paid`, `shipped`, `delivered` siparişler.
+
+**Sonuç — birlikte alınan ürün çiftleri:**
+
+```
+ urun_a |   sku_a   | urun_b |   sku_b   | birlikte_siparis
+--------+-----------+--------+-----------+------------------
+    118 | SKU-00118 |    169 | SKU-00169 |             1968
+    169 | SKU-00169 |    186 | SKU-00186 |             1263
+    169 | SKU-00169 |   1573 | SKU-01573 |             1013
+```
+
+**Sonuç — LTV:**
+
+```
+ musteri | ort_ltv | medyan_ltv | ort_ilk90 | ilk90_payi_yuzde | ort_omur_gun
+---------+---------+------------+-----------+------------------+--------------
+   17719 | 1113.20 |     565.75 |    495.28 |            44.49 |        208.2
+```
+
+**Sonuç — stok seyri (ürün 169):**
+
+```
+    gun     | gunluk_hareket | kumulatif_stok
+------------+----------------+----------------
+ 2024-01-13 |             -2 |             -2
+ 2024-01-16 |             -2 |             -4
+
+ ilk_negatif_gun | en_dip
+-----------------+--------
+ 2024-01-13      | -29950
+```
+
+**İş yorumu — sepet birlikteliği:**
+
+En sık birlikte satın alınan çift, katalogdaki en popüler iki üründür ve listenin tamamı popüler ürünlerin kombinasyonlarından oluşuyor. Veri üreticisi ürünleri sepette birbirinden bağımsız seçtiği için birlikte görülme sayısı, iki ürünün popülerliğinin çarpımına eşittir; gerçek bir ürün yakınlığı bulunmamaktadır.
+
+Bu nedenle sepet analizi ham birliktelik sayısıyla yapılmaz. Doğru ölçü lift'tir: `lift(A,B) = P(A ve B) / (P(A) × P(B))`. Bağımsız ürünlerde lift 1'e yakındır; gerçek bir yakınlık varsa 1'in belirgin üzerine çıkar. Ham sayıyla sıralama her zaman en popüler ürünleri öne çıkarır ve hiçbir bilgi üretmez. Bu veri setinde lift hesaplansaydı tüm çiftler için ~1 çıkardı.
+
+**İş yorumu — LTV:**
+
+Ortalama müşteri yaşam boyu değeri 1.113,20 TL, medyan 565,75 TL'dir; ortalamanın medyanın 1,97 katı olması dağılımın sağa çarpık olduğunu gösterir ve müşteri değeri hedeflerinde medyan kullanılması gerektiğine işaret eder.
+
+Operasyonel olarak en kullanışlı bulgu, yaşam boyu değerin %44,49'unun ilk 90 günde gerçekleşmesidir (ortalama 495,28 TL). Müşteri kazanım maliyeti kararları bu orana dayandırılır: kazanım maliyeti ilk 90 gün gelirinin altındaysa yatırım üç ay içinde geri döner. Ortalama müşteri ömrü 208,2 gündür, dolayısıyla değerin kalan yarısı sonraki dört aya yayılmaktadır.
+
+**Bulgu — stok defteri nedensel olarak sıralı değil:**
+
+Ürün 169'un defterindeki ilk hareket bir satıştır ve stok ilk gün (2024-01-13) negatife düşmektedir. Mal girişi yapılmadan satış kaydedilmiş durumda. Veri üreticisi alım hareketlerinin tarihlerini zaman çizgisine rastgele dağıtıyor, satışların öncesine yerleştirmiyor.
+
+Gerçek bir stok defterinde bu durum imkânsızdır ve veri düzeyinde korunması gereken bir kuraldır: bir ürünün kümülatif bakiyesi hiçbir anda negatif olamaz. Bu kural tek satırlık `CHECK` kısıtıyla ifade edilemez, çünkü kümülatif bir koşuldur; uygulama katmanında veya veri kalitesi kontrolüyle denetlenmelidir.
+
+**İyileştirme notu (`scripts/generate.py`):** Alım hareketleri, o ürünün ilk satışından önce başlayacak ve talebi karşılayacak hacimde üretilmelidir.
+
+**Metodolojik not — self join ile çift üretme:** Aynı siparişteki iki ürünü eşleştirmek için `order_items` tablosu kendisiyle birleştirilir. Birleştirme koşulunda `oi1.product_id < oi2.product_id` kullanılması zorunludur; `<>` yazılması hâlinde her çift (A-B ve B-A olmak üzere) iki kez üretilir ve sayılar iki katına çıkar.
+
+---
+
+## 46–50 — Veri kalitesi kontrolleri
+
+**SQL:** `sql-mastery/queries/q46_q50_veri_kalitesi.sql`
+
+**Sonuçlar:**
+
+```
+46) stock_cached defterle uyusmayan urun ............... 0        (beklenen: 0)
+47) odeme <> sepet - indirim olan siparis .............. 164      (beklenen: 0)  ** BULGU **
+    en buyuk sapma ..................................... 1.01 TL
+48) list_price'tan sapan kalem ......................... 168793 / 168920  (%99,92)
+    unit_price / list_price orani ..................... 0.8499 - 1.0000
+    liste fiyatinin ustunde satilan kalem ............. 0
+49) kargo kaydi olmayan shipped/delivered/returned ..... 23       (kasitli anomali)
+50) inv_order_link ihlali .............................. 0        (kisit garanti ediyor)
+EK) bir ara stogu negatife dusen urun .................. 621      (bugun negatif olan: 16)  ** BULGU **
+```
+
+**Bulgu 1 — Kupon istiflemesi sipariş tutarını sıfıra indiriyor (47).**
+
+164 siparişte ödenen tutar, sepet tutarı eksi kupon indirimine eşit değil; sapma tam olarak 1,01 TL. Kaynak, veri üreticisinde ödenecek tutarın `max(sepet − indirim, 1.00)` ile hesaplanmasıdır: indirim sepetin tamamını tükettiği için tutar taban değere düşmüştür.
+
+Mekanizma kupon istiflemesidir. Tutar tipindeki bir kupon sepetin en fazla %50'sini indirebiliyor, ancak K-004 kararı gereği bir siparişe birden çok kupon uygulanabildiği için iki kupon birlikte sepetin %100'üne ulaşabiliyor. Bu senaryo K-004 kararı alınırken değerlendirilmemişti.
+
+Gerçek bir sistemde bu bir gelir sızıntısı ve kötüye kullanım açığıdır. Toplam indirim üst sınırı sipariş seviyesinde tanımlanmalıdır (örneğin sepet tutarının en fazla %50'si), tek tek kupon seviyesinde değil. 164 siparişlik hacim düşük görünse de bulgu, kuralın hiç bulunmadığını gösteriyor.
+
+**Bulgu 2 — Anlık kontrol ihlallerin %97'sini kaçırıyor (EK).**
+
+05. soruda bugünkü stok bakiyesi negatif olan 16 ürün tespit edilmişti. Kümülatif bakiye zaman serisi üzerinden bakıldığında, geçmişin herhangi bir anında bakiyesi negatife düşen ürün sayısı 621'dir — katalogun %31'i.
+
+Fark, sonradan kaydedilen alım hareketlerinin bakiyeyi tekrar artıya çekmesinden kaynaklanıyor; ihlal kendini siliyor. Bu, veri kalitesi kontrollerinde temel bir ayrımı ortaya koyuyor: anlık durum kontrolü (bugünün bakiyesi) geçmişte oluşmuş ve sonradan kapanmış ihlalleri göremez. Kümülatif veya zamana bağlı kuralların denetimi zaman serisi üzerinden yapılmalıdır.
+
+Ayrıca bu kural tek satırlık `CHECK` kısıtıyla ifade edilemez, çünkü bir satırın geçerliliği kendinden önceki satırların toplamına bağlıdır. Kümülatif kurallar ya uygulama katmanında ya da düzenli çalışan veri kalitesi sorgularıyla denetlenir.
+
+**48 — Beklenen sapma:** Kalemlerin %99,92'sinde `unit_price`, ürünün güncel `list_price` değerinden farklı. Bu bir hata değil, K-002 kararının çalıştığının kanıtıdır: satış fiyatı sipariş anında satıra kopyalanır ve sonradan değişmez. Oran aralığı 0,8499–1,0000 olup hiçbir kalem liste fiyatının üzerinde satılmamıştır; üretici satış fiyatını liste fiyatının %85–%100'ü arasında belirlemektedir. Gerçek bir veride fiyat artışları da bulunacağı için oranın 1,0'ın üzerine çıkan değerler içermesi beklenirdi; bu veri fiyat artışı senaryosunu hiç üretmiyor.
+
+**49 — Çapraz doğrulama:** Kargo kaydı olmayan sipariş sayısı 23; `seed/checks.sql`, 25. soru ve bu kontrol aynı sayıyı veriyor.
+
+**İyileştirme notları (`scripts/generate.py`):**
+- Sipariş seviyesinde toplam indirim üst sınırı uygulanmalı (sepetin en fazla %50'si).
+- Alım hareketleri satışlardan önce ve talebi karşılayacak hacimde üretilmeli.
+- Satış fiyatı, liste fiyatının üzerine de çıkabilmeli (fiyat artışı senaryosu).

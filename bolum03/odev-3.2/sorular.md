@@ -52,19 +52,19 @@ Durum: [ ] açık · [x] kapalı
 - [x] 35 — Kullanıcı-ürün başına en son yorum (DISTINCT ON).
 - [x] 36 — Kümülatif ciro seyri (SUM OVER).
 - [x] 37 — Kategori ağacında bir kökün altındaki tüm ürünler (recursive CTE).
-- [ ] 38 — Her kullanıcının ilk siparişinde aldığı ürünler.
-- [ ] 39 — Kullanıcı başına sipariş aralıklarının ortalaması.
-- [ ] 40 — En sık birlikte satın alınan ürün çiftleri (self join).
+- [x] 38 — Her kullanıcının ilk siparişinde aldığı ürünler.
+- [x] 39 — Kullanıcı başına sipariş aralıklarının ortalaması.
+- [x] 40 — En sık birlikte satın alınan ürün çiftleri (self join).
 - [x] 41 — Her ayın en iyi 3 müşterisi (RANK).
-- [ ] 42 — Kullanıcı yaşam boyu değeri ve ilk 90 günün payı.
-- [ ] 43 — Stok defterinden gün gün stok seyri (kümülatif toplam).
+- [x] 42 — Kullanıcı yaşam boyu değeri ve ilk 90 günün payı.
+- [x] 43 — Stok defterinden gün gün stok seyri (kümülatif toplam).
 - [x] 44 — Ciroda ilk %20 müşterinin payı (Pareto).
-- [ ] 45 — Terk oranı: daha önce sipariş vermiş ama son 90 gündür vermeyen kullanıcılar.
+- [x] 45 — Terk oranı: daha önce sipariş vermiş ama son 90 gündür vermeyen kullanıcılar.
 
 ## D. Veri kalitesi
 
-- [ ] 46 — `products.stock_cached`, defter toplamına eşit mi?
-- [ ] 47 — Ödeme toplamı sipariş toplamına eşit mi?
-- [ ] 48 — `order_items.unit_price` ile `products.list_price`'ın saptığı satırlar. (sapma beklenen — neden?)
-- [ ] 49 — Durumu `shipped` olup kargo kaydı bulunmayan siparişler.
-- [ ] 50 — `inv_order_link` kuralına aykırı satır var mı? Kısıt olmasaydı bunu nasıl arardık?
+- [x] 46 — `products.stock_cached`, defter toplamına eşit mi?
+- [x] 47 — Ödeme toplamı sipariş toplamına eşit mi?
+- [x] 48 — `order_items.unit_price` ile `products.list_price`'ın saptığı satırlar. (sapma beklenen — neden?)
+- [x] 49 — Durumu `shipped` olup kargo kaydı bulunmayan siparişler.
+- [x] 50 — `inv_order_link` kuralına aykırı satır var mı? Kısıt olmasaydı bunu nasıl arardık?
