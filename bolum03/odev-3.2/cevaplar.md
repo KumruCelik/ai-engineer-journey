@@ -781,3 +781,72 @@ Bunun iş karşılığı soğuk başlangıç (cold start) döngüsüdür: yorumu
 | 4 | `checks.sql` (1) — `stock_cached` doğrulaması | 11,1 sn | 1 ile aynı kalıp |
 
 Ortak nokta: yabancı anahtar kolonlarında index bulunmuyor (bilinçli karar — 002_products.sql notu).
+
+---
+
+## 24 — Ülke bazında sipariş sayısı ve ciro
+
+**SQL:** `sql-mastery/queries/q24_ulke_bazinda_ciro.sql`
+**Kapsam:** `paid`, `shipped`, `delivered` siparişler.
+
+**Sonuç:**
+
+```
+    ulke    | siparis |  adet  |    ciro     | ort_sepet | ciro_payi
+------------+---------+--------+-------------+-----------+-----------
+ TR         |   56986 | 132481 | 13041878.86 |    228.86 |     66.12
+ DE         |    8262 |  19375 |  1916286.25 |    231.94 |      9.72
+ bilinmiyor |    4423 |  10189 |  1006331.55 |    227.52 |      5.10
+ US         |    4111 |   9725 |   946203.24 |    230.16 |      4.80
+ FR         |    4087 |   9695 |   941693.05 |    230.41 |      4.77
+ GB         |    4120 |   9462 |   938335.44 |    227.75 |      4.76
+ NL         |    3985 |   9307 |   934089.69 |    234.40 |      4.74
+
+ toplam_siparis | ayni  | farkli | farkli_yuzde
+----------------+-------+--------+--------------
+         100000 | 45210 |  54790 |        54.79
+```
+
+**İş yorumu:**
+
+Ciro büyük ölçüde tek pazara bağlı: Türkiye toplam cironun %66,12'sini üretiyor, ikinci sıradaki Almanya %9,72'de kalıyor. Gönderi ülkesi bilinmeyen siparişler %5,10'luk payla üçüncü sırada ve dört gerçek ülkeden daha büyük bir dilim oluşturuyor; `COALESCE` ile etiketlenmeseydi bu kitle raporda hiç görünmeyecek, ülke toplamları genel ciroya eşit çıkmayacaktı.
+
+Ortalama sepet tutarları ülkeler arasında pratikte aynı (227,52 – 234,40 TL). Gerçek bir çok ülkeli operasyonda sepet tutarı, ürün karması ve marj ülkeye göre belirgin şekilde ayrışır; buradaki düzlük veri üreticisinin ülkeyi tamamen rastgele ataması sonucudur ve ülke bazlı fiyatlama/kampanya analizinin bu veri üzerinde anlamlı olmayacağını gösterir.
+
+**Veri kalitesi bulgusu:** Siparişlerin %54,79'unda gönderi ülkesi, kullanıcının kayıtlı ülkesinden farklı. Gerçek bir sistemde bu oran %5-10 bandında beklenir (hediye gönderimi, iş adresi, taşınma). %55'lik bir fark, iki alanın birbirinden bağımsız üretildiğini gösteriyor ve ülke bazlı hiçbir analizin hangi alana dayandırılacağı sorusunu belirsiz bırakıyor.
+
+**Metodolojik not — `IS DISTINCT FROM`:** İki kolonun farklı olup olmadığı sorgulanırken her iki taraf da `NULL` olabiliyorsa `<>` operatörü kullanılamaz; `NULL` içeren karşılaştırma `TRUE` dönmez ve satır sessizce elenir. `IS DISTINCT FROM` iki `NULL` değeri eşit sayar, `NULL` ile dolu değeri farklı sayar. Bu, `GROUP BY` ve `DISTINCT`'in `NULL`'lara uyguladığı "ayırt edilemezlik" mantığının operatör karşılığıdır.
+
+---
+
+## 25 — Kargo firması bazında ortalama teslim süresi
+
+**SQL:** `sql-mastery/queries/q25_kargo_teslim_suresi.sql`
+
+**Sonuç:**
+
+```
+ kargo_firmasi | gonderi | teslim_edilen | teslim_edilmeyen | teslim_edilmeme_yuzde | ort_teslim_gun
+---------------+---------+---------------+------------------+-----------------------+----------------
+ Yurtici       |   15781 |         13124 |             2657 |                 16.84 |           4.00
+ MNG           |   15562 |         13092 |             2470 |                 15.87 |           4.00
+ PTT           |   15422 |         12827 |             2595 |                 16.83 |           4.01
+ Aras          |   15612 |         12969 |             2643 |                 16.93 |           4.01
+ UPS           |   15622 |         13059 |             2563 |                 16.41 |           4.01
+
+ toplam_gonderi | ortalamaya_giren | ortalamanin_disinda_kalan
+----------------+------------------+---------------------------
+          77999 |            65071 |                     12928
+```
+
+**İş yorumu:**
+
+Beş kargo firmasının ortalama teslim süresi 4,00–4,01 gün, teslim edilememe oranı %15,87–%16,93 aralığında. Firmalar arasında ayırt edici bir fark yok; veri üreticisi kargo firmasını rastgele atadığı ve teslim süresini 1–7 gün arasında düzgün dağıttığı için bu beklenen sonuçtur. Firma seçimi kararı bu veri üzerinde alınamaz.
+
+Teslim süresi dağılımı da gerçekçi değil: minimum 1, maksimum 7 gün ve arada düzgün dağılım var. Gerçek teslimat süreleri sağa çarpık dağılır — çoğu gönderi 2-4 günde varır, küçük bir kuyruk 15-30 günü bulur. Bu kuyruk, müşteri şikâyetlerinin ve operasyonel maliyetin büyük kısmını üretir ve burada tamamen yok.
+
+**Metodolojik not — hayatta kalma yanlılığı:** Ortalama teslim süresi yalnızca teslim edilmiş gönderiler üzerinden hesaplanabilir, çünkü teslim edilmemiş gönderinin `delivered_at` değeri `NULL`'dur ve `avg()` `NULL` satırları sessizce atlar. 77.999 gönderinin 12.928'i (%16,6) ortalamanın dışında kaldı ve bunlar tam olarak hiç varmayan gönderilerdir. Uç durumda, paketleri hiç teslim etmeyen bir kargo firması "ortalama teslim süresi" tablosunda mükemmel görünürdü; tek bir satırı ortalamaya girmeyeceği için.
+
+Bu nedenle teslim performansı tek bir ortalamayla raporlanamaz. Doğru rapor iki sayıyı birlikte verir: teslim edilenlerin ortalama süresi **ve** teslim edilememe oranı. Bu sorguda ikisi bilerek yan yana konulmuştur.
+
+**Çapraz doğrulama:** `shipments` tablosunda 12.928 `in_transit`, 63.092 `delivered`, 1.979 `returned` kaydı var. `orders` tablosunda karşılıkları sırasıyla 12.933, 63.110 ve 1.979. Farklar 5 + 18 + 0 = 23 ve bu, `seed/checks.sql` ikinci kontrolünün bulduğu "kargo kaydı olmayan sipariş" sayısıyla birebir aynı. Üreticiye bilerek yerleştirilen anomali, bağımsız bir sorguda aynı sayıyla doğrulanmış oldu.
