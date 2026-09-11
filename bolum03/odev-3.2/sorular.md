@@ -22,13 +22,13 @@ Durum: [ ] açık · [x] kapalı
 
 ## B. Seviye 2 — birleştirme ve gruplama
 
-- [ ] 11 — Her kullanıcının sipariş sayısı ve toplam harcaması.
-- [ ] 12 — Hiç sipariş vermemiş kullanıcılar kimler?
-- [ ] 13 — Kategori bazında toplam ciro.
-- [ ] 14 — Adet bazında en çok satan 10 ürün.
-- [ ] 15 — Ciro bazında en çok satan 10 ürün. 14 ile farkı ne anlatıyor?
-- [ ] 16 — Sipariş başına ortalama sepet tutarı.
-- [ ] 17 — Sipariş başına ortalama kalem sayısı.
+- [x] 11 — Her kullanıcının sipariş sayısı ve toplam harcaması.
+- [x] 12 — Hiç sipariş vermemiş kullanıcılar kimler?
+- [x] 13 — Kategori bazında toplam ciro.
+- [x] 14 — Adet bazında en çok satan 10 ürün.
+- [x] 15 — Ciro bazında en çok satan 10 ürün. 14 ile farkı ne anlatıyor?
+- [x] 16 — Sipariş başına ortalama sepet tutarı.
+- [x] 17 — Sipariş başına ortalama kalem sayısı.
 - [ ] 18 — Ödemesi başarısız olan sipariş oranı.
 - [ ] 19 — Funnel: created → paid → shipped → delivered dönüşüm oranları. (zorunlu)
 - [ ] 20 — İptal edilen siparişlerdeki ürünler: sepete girip satılmayanlar. (zorunlu)

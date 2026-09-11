@@ -341,3 +341,196 @@ Bunun analitik açıdan daha ciddi bir sonucu var: üretici kuponları siparişl
 - `scripts/generate.py`: kupon geçerlilik pencereleri veri ufkunu kapsayacak şekilde üretilmeli; en az birkaç kupon yürürlükte kalmalı.
 - `scripts/generate.py`: kupon ancak geçerlilik penceresi içindeki siparişlere uygulanmalı.
 - Yeni veri kalitesi kontrolü: geçerlilik aralığı dışında kullanılmış kuponlar (JOIN gerektirir, B grubunda yazılacak).
+
+---
+
+## 11 — Her kullanıcının sipariş sayısı ve toplam harcaması
+
+**SQL:** `sql-mastery/queries/q11_kullanici_siparis_harcama.sql`
+
+**Sonuç:**
+
+```
+ join_sonucu_satir | gercek_siparis_sayisi
+-------------------+-----------------------
+            168920 |                100000
+
+  id   | yanlis_siparis_sayisi | dogru_siparis_sayisi | toplam_harcama | ortalama_sepet
+-------+-----------------------+----------------------+----------------+----------------
+  6754 |                  2750 |                 1613 |      367074.02 |         227.57
+  3511 |                  1780 |                 1025 |      247024.69 |         241.00
+ 13040 |                  1194 |                  730 |      162050.24 |         221.99
+  3614 |                  1039 |                  617 |      132945.23 |         215.47
+ 16900 |                   903 |                  544 |      121361.25 |         223.09
+```
+
+**İş yorumu:**
+
+Harcama, kullanıcılar arasında aşırı derecede yoğunlaşmış: en aktif kullanıcı tek başına 1.613 sipariş vermiş, yani toplam 100.000 siparişin %1,6'sı. Gerçek bir perakende operasyonunda tek bir bireysel hesabın bu paya ulaşması olağandışıdır ve böyle bir satır normalde kurumsal hesap, bot trafiği veya veri hatası şüphesiyle incelenir. Buradaki kaynak veri kurgusudur: kullanıcı seçimi güç yasasıyla yapılıyor ve üs değeri (0,7) gerçekçi olmayacak kadar yoğunlaştırıcı.
+
+İkinci ve analitik açıdan daha kısıtlayıcı bulgu ortalama sepet tutarında: ilk on beş kullanıcının hepsi 215–272 TL bandında. Gerçek bir müşteri tabanında bu ölçü geniş yayılır — sık ve düşük tutarlı alışveriş yapan müşteri ile seyrek ve yüksek tutarlı alışveriş yapan müşteri birbirinden ayrışır. Bu veride sepet içeriği kullanıcıdan bağımsız seçildiği için parasal değer, sipariş sayısının yaklaşık sabit bir katına eşit hâle geliyor. Sonucu: RFM segmentasyonunda (27. soru) Monetary ve Frequency boyutları aynı bilgiyi taşıyacak ve üç boyutlu segmentasyon pratikte tek boyuta çökecektir. Sorgu doğru çalışacak, ancak ürettiği segmentler ayırt edici olmayacaktır.
+
+**Metodolojik not — fan-out:** `orders` ile `order_items` birleştirildiğinde bir sipariş satırı, o siparişin her kalemiyle ayrı ayrı eşleşir; join sonucu 168.920 satırdır ve bu sipariş sayısı değil kalem sayısıdır. Bu durumda `count(*)` ve `count(o.id)` sipariş sayısını 1,69 kat şişirir (örnek: 2.750 yerine doğru değer 1.613). Doğru sayım `count(DISTINCT o.id)` ile yapılır. Şişmiş sayı makul göründüğü için hata rapor okunurken fark edilmez; bu yüzden her join'den önce beklenen satır sayısı yazılmalıdır.
+
+Fan-out her ölçüyü bozmaz: `sum(oi.quantity * oi.unit_price)` doğrudur, çünkü çoğaltılan taraf `orders`'tır, kalem satırları sonuçta birer kez bulunur. Kural: join'de "çok" tarafındaki tablonun ölçüleri güvenli, "bir" tarafındaki tablonun ölçüleri şişer. `orders` tablosunda toplam tutar kolonu tutmama kararı (DESIGN.md) bu nedenle isabetlidir; böyle bir kolon olsaydı kalemlerle birleştiren her sorgu sessizce yanlış ciro üretirdi.
+
+---
+
+## 12 — Hiç sipariş vermemiş kullanıcılar kimler?
+
+**SQL:** `sql-mastery/queries/q12_siparis_vermeyen_kullanicilar.sql`
+
+**Sonuç:** 20.000 kullanıcıdan **1.715'i** (%8,6) hiç sipariş vermemiş. Üç farklı yazım (LEFT JOIN + IS NULL, NOT EXISTS, NOT IN) aynı sonucu verdi.
+
+```
+ siparis_vermeyen
+------------------
+             1715
+
+-- ornek kullanicilar (en yeni kayitlar)
+ 18721 | FR | 2026-03-30
+  2241 | FR | 2026-03-29
+  3970 | TR | 2026-03-29
+```
+
+**NOT IN tuzağı — canlı kanıt** (nullable kolon üzerinde):
+
+```
+ not_exists_ile      not_in_ile
+----------------    ------------
+          12047               0
+
+ toplam_hareket | order_id_dolu | order_id_null
+----------------+---------------+---------------
+         164012 |        151820 |         12192
+```
+
+**İş yorumu:**
+
+Kayıtlı kullanıcıların %8,6'sı hiç sipariş vermemiş. Bu oran tek başına bir dönüşüm sorunu göstergesi değildir, çünkü örneklem incelendiğinde sipariş vermeyen kullanıcıların en son kaydolanlar olduğu görülüyor (2026-03-26 ile 03-30 arası). Yeni kaydolmuş bir kullanıcının henüz sipariş vermemiş olması beklenen durumdur. "Hiç sipariş vermemiş" ölçüsü bu hâliyle iki farklı olguyu bir arada sayıyor: henüz dönüşmemiş yeni kullanıcı ile hiç dönüşmemiş eski kullanıcı. Kayıt-sipariş dönüşümünü ölçmek için kullanıcılar kayıt tarihinden bu yana geçen süreye (tenure) göre ayrılmalı; örneğin "kaydolduktan sonra 30 gün geçmiş ve hâlâ sipariş vermemiş kullanıcılar" anlamlı bir dönüşüm kaybı ölçüsüdür.
+
+Stok hareketi olmayan sipariş sayısı 12.047 olarak bulundu ve bu değer bağımsız olarak doğrulanabiliyor: 07. soruda `created` durumundaki 6.977 ve `cancelled` durumundaki 5.070 sipariş, toplam 12.047 eder. Bu iki grup için satış hareketi üretilmiyor. Çapraz doğrulamanın tutması, sorgunun doğruluğuna dair güçlü bir kanıttır.
+
+**Metodolojik not — anti-join ve `NOT IN`:**
+
+Bir tabloda karşılığı olmayan satırları bulmanın üç yolu vardır: `LEFT JOIN` + `IS NULL`, `NOT EXISTS`, `NOT IN`. İlk ikisi her zaman güvenlidir, üçüncüsü değildir.
+
+`inventory_movements.order_id` kolonunda 12.192 `NULL` bulunuyor (alım ve düzeltme hareketlerinde sipariş yoktur). Bu kolon üzerinden yazılan `NOT IN` sorgusu, doğru cevap 12.047 iken **0 döndürdü ve hata vermedi**. Sebebi üç değerli mantıktır: `x NOT IN (a, b, NULL)` ifadesi `x <> a AND x <> b AND x <> NULL` anlamına gelir; son karşılaştırma `NULL` döndüğü için bileşik ifade hiçbir zaman `TRUE` olamaz ve `WHERE` hiçbir satırı geçirmez. Kural: alt sorguyla olumsuzlama yapılacaksa `NOT EXISTS` kullanılmalı; `NOT IN` yalnızca alt sorgudaki kolonun `NOT NULL` olduğu şemadan doğrulandığında kullanılmalıdır.
+
+**Metodolojik not — `LEFT JOIN` sonrası filtre:** `LEFT JOIN` sonrasında `WHERE sag_tablo.kolon IS NOT NULL` yazmak, eşleşmeyen satırları eleyeceği için sorguyu sessizce `INNER JOIN`'e çevirir; `LEFT` yazmanın anlamı kalmaz. Anti-join kalıbında kontrol edilecek kolon, sağ tablonun `NOT NULL` bir kolonu (tercihen birincil anahtarı) olmalıdır; nullable bir kolon seçilirse gerçek eşleşmeler de elenir.
+
+---
+
+## 13 — Kategori bazında toplam ciro
+
+**SQL:** `sql-mastery/queries/q13_kategori_ciro.sql`
+
+**Kapsam kararı:** Ciro = `paid`, `shipped`, `delivered` durumundaki siparişler. `created` ve `cancelled` hariç (para girmedi), `returned` hariç (net ciro ölçülüyor).
+**Kısıt:** Ürünler yalnızca yaprak kategorilere bağlı; kök kategori toplamları ağacı yukarı toplamayı gerektirir (37. soru).
+
+**Sonuç:** 32 yaprak kategori, toplam ciro 19.724.818,08 TL.
+
+```
+ kategori_id |       kategori        | siparis_sayisi | satilan_adet |    ciro    | brut_marj
+-------------+-----------------------+----------------+--------------+------------+------------
+          30 | Kitap Premium         |           8989 |        12515 | 2934301.03 | 1263361.69
+           8 | Kirtasiye Aksesuar    |          26672 |        38049 | 1729130.71 |  776262.59
+          28 | Kitap Aksesuar        |           9283 |        13166 | 1169534.99 |  387332.48
+          14 | Mutfak Yeni Sezon     |           7726 |        10802 |  992925.51 |  347237.49
+          29 | Kitap Yeni Sezon      |           3957 |         5573 |  769824.97 |  238107.13
+          ...
+          19 | Giyim Yeni Sezon      |            937 |         1304 |  237204.70 |  108550.39
+(32 satir)
+```
+
+**İş yorumu:**
+
+Ciro kategoriler arasında dengesiz dağılıyor: ilk kategori (2,93 milyon TL) sonuncunun (237 bin TL) on iki katı ve tek başına toplam cironun %15'ini oluşturuyor. Ancak bu sıralamadan kategori bazlı bir iş sonucu çıkarılamaz, çünkü veri üreticisi ürünleri kategorilere tamamen rastgele dağıtıyor; bir kategorinin lider olması, o kategoriye tesadüfen pahalı ve popüler ürünlerin düşmesinden kaynaklanıyor. Sorgu doğrudur, kategori isimleriyle kurulacak yorum değildir.
+
+Kategorilerden bağımsız olarak geçerli kalan bulgu, iki farklı ciro modelinin varlığı: `Kitap Premium` 12.515 adet satışla 2,93 milyon TL ciro üretiyor (adet başına ~234 TL), `Kirtasiye Aksesuar` ise 38.049 adetle 1,73 milyon TL (adet başına ~45 TL). Birincisi düşük hacim-yüksek birim fiyat, ikincisi yüksek hacim-düşük birim fiyat modelidir. Brüt marj oranları da ayrışıyor: `Bahce Aksesuar` %52,4 marjla çalışırken `Elektronik Premium` %29,1'de kalıyor. Gerçek bir katalogda bu ayrışma stok, fiyatlama ve kampanya kararlarının temeli olurdu.
+
+**Metodolojik not — toplanabilirlik:** `siparis_sayisi` kolonundaki değerler toplandığında 142.950 çıkıyor, oysa kapsamdaki gerçek sipariş sayısı 85.974'tür. Bir sipariş birden çok kategoriden ürün içerebildiği için her kategoride ayrı sayılıyor. `count(DISTINCT ...)` gruplar arasında toplanabilir bir ölçü değildir; `sum(ciro)` ve `sum(adet)` toplanabilirdir, oranlar ve ortalamalar değildir. Ara toplam satırı içeren her raporda ölçünün toplanabilirliği önce doğrulanmalıdır.
+
+---
+
+## 14 ve 15 — Adet bazında ve ciro bazında en çok satan 10 ürün
+
+**SQL:** `sql-mastery/queries/q14_q15_en_cok_satan_urunler.sql`
+**Kapsam:** `paid`, `shipped`, `delivered` siparişler.
+
+**Sonuç — adet bazında ilk 10:**
+
+```
+  id  |    sku    | list_price | satilan_adet |    ciro
+------+-----------+------------+--------------+------------
+  169 | SKU-00169 |      34.19 |        31430 |  993796.20
+  118 | SKU-00118 |      29.57 |        15467 |  423435.15
+  186 | SKU-00186 |     290.86 |        10010 | 2693709.88
+ 1573 | SKU-01573 |      53.65 |         7586 |  376481.38
+  720 | SKU-00720 |      20.68 |         5969 |  114126.80
+```
+
+**Sonuç — ciro bazında ilk 10:**
+
+```
+  id  |    sku    | list_price | satilan_adet |    ciro
+------+-----------+------------+--------------+------------
+  186 | SKU-00186 |     290.86 |        10010 | 2693709.88
+  169 | SKU-00169 |      34.19 |        31430 |  993796.20
+ 1088 | SKU-01088 |     576.19 |          931 |  496179.87
+  118 | SKU-00118 |      29.57 |        15467 |  423435.15
+  470 | SKU-00470 |     279.59 |         1509 |  390285.35
+```
+
+**İş yorumu:**
+
+İki listede yalnızca 5 ürün ortak; ölçü değiştiğinde sıralamanın yarısı değişiyor. Üç tipik profil ayrışıyor: SKU-00169 adette birinci ama 34 TL birim fiyatıyla ciroda ikinci (yüksek hacim, düşük değer); SKU-00186 hem yüksek hacimli hem 290 TL birim fiyatlı olduğu için ciroda birinci; SKU-01088 yalnızca 931 adet satmasına rağmen 576 TL birim fiyatıyla ciro listesine giriyor ve adet listesinde hiç görünmüyor (düşük hacim, yüksek değer).
+
+Pratik sonucu, "en çok satan ürün" ifadesinin tek başına anlamsız olmasıdır. Stok ve depo planlaması adet ölçüsüne, kârlılık ve kampanya kararları ciro ölçüsüne bakar; raf/vitrin kararları ikisini birden gerektirir. Bir raporda "en çok satan" başlığı kullanılıyorsa ölçünün hangisi olduğu açıkça yazılmalıdır.
+
+Ciro yoğunlaşması dikkat çekici düzeyde: SKU-00186 tek başına 2,69 milyon TL ile toplam 19,72 milyonluk cironun %13,7'sini üretiyor. Bu, tek ürüne bağımlılık anlamına gelir ve gerçek bir işletmede tedarik riski olarak izlenir. Buradaki kaynak veri kurgusudur — ürün popülerliği güç yasasıyla dağıtılıyor ve üs değeri gerçekçi olmayacak kadar yoğunlaştırıcı.
+
+**Çapraz doğrulama:** Adet listesindeki ürün kimlikleri (169, 118, 186, 1573, 720, 1604, 674, 775, 617, 462), 05. soruda stoğu negatife düşen ürünlerin listesiyle örtüşüyor. Beklenen sonuç budur: stoğu eksiye düşen ürünler alımdan fazla satanlardır. İki bağımsız sorgunun aynı ürün kümesine işaret etmesi, her ikisinin de doğru yazıldığına dair kanıttır.
+
+---
+
+## 16 ve 17 — Ortalama sepet tutarı ve sipariş başına ortalama kalem sayısı
+
+**SQL:** `sql-mastery/queries/q16_q17_ortalama_sepet_ve_kalem.sql`
+**Kapsam:** `paid`, `shipped`, `delivered` siparişler (85.974 sipariş).
+
+**Sonuç:**
+
+```
+ siparis_sayisi | ortalama_sepet | en_kucuk_sepet | en_buyuk_sepet
+----------------+----------------+----------------+----------------
+          85974 |         229.43 |           8.46 |        4307.92
+
+ kalem_ortalamasi_YANLIS
+-------------------------
+                  135.83
+
+ ortalama_kalem | en_az | en_cok
+----------------+-------+--------
+          1.689 |     1 |      5
+
+ kalem_sayisi | siparis_sayisi | yuzde
+--------------+----------------+-------
+            1 |          39779 | 46.27
+            2 |          34440 | 40.06
+            3 |          10506 | 12.22
+            4 |           1200 |  1.40
+            5 |             49 |  0.06
+```
+
+**İş yorumu:**
+
+Ortalama sepet tutarı 229,43 TL, sepetler 8,46 TL ile 4.307,92 TL arasında değişiyor. Sipariş başına ortalama kalem sayısı 1,689; siparişlerin %46'sı tek kalemlik, %40'ı iki kalemlik. Üç ve üzeri kalem içeren sipariş oranı %13,7'de kalıyor. Gerçek bir operasyonda bu tablo, çapraz satış (cross-sell) potansiyelinin kullanılmadığını gösterirdi: müşterilerin neredeyse yarısı tek ürün alıp çıkıyor ve sepet büyütmeye yönelik öneri mekanizması ya yok ya etkisiz. Sepet başına kalem sayısını 1,69'dan 2,0'a çıkarmak, birim fiyat sabitken ciroyu yaklaşık %18 artırırdı.
+
+**Bulgu — veri üreticisinde hata:** Gözlenen kalem sayısı dağılımı, üreticiye tanımlanan ağırlıklarla (1:%45, 2:%28, 3:%15, 4:%8, 5:%4; beklenen ortalama 1,98) uyuşmuyor. Sapma sistematik olduğu için veri değil kod incelendi ve hata bulundu: `while len(secilen) < random.choice(ITEM_COUNTS)` satırında hedef kalem sayısı döngünün her turunda yeniden çekiliyor, bir kez belirlenip sabitlenmiyor. Bu varsayımla hesaplanan dağılım (0,450 / 0,4015 / 0,1307 / 0,0171 / 0,0007) gözlenen dağılımla (0,4627 / 0,4006 / 0,1222 / 0,0140 / 0,0006) örtüşüyor ve hatayı doğruluyor.
+
+Düzeltme, hedef kalem sayısının döngü öncesinde bir kez belirlenmesidir. Düzeltme bu aşamada uygulanmadı: mevcut cevapların tamamı bu veri setine ait sayılar içeriyor ve verinin değişmesi hepsini geçersiz kılardı. Veri kendi içinde tutarlı olduğundan analizlerin doğruluğu etkilenmiyor; düzeltme, diğer üretici iyileştirmeleriyle birlikte bölüm sonunda uygulanıp tüm sorgular yeniden çalıştırılacaktır.
+
+**Metodolojik not — türetilmiş tablo:** "Sipariş başına ortalama" iki aşamalı bir hesaptır: önce sipariş bazında toplama, sonra bu toplamların ortalaması. Doğrudan `avg(quantity * unit_price)` yazmak sipariş değil kalem ortalamasını verir ve sonucu %41 düşük gösterir (135,83'e karşı 229,43). İki sonuç arasındaki ilişki `135,83 × 1,689 = 229,4` olarak doğrulanıyor; bu çarpımın tutması iki sorgunun da doğru yazıldığının kanıtıdır.
+
+**Metodolojik not — ortalamaların ortalaması:** Alt gruplarda hesaplanmış ortalamaların tekrar ortalanması, grup büyüklükleri farklı olduğunda yanlış sonuç verir. Genel ortalama her zaman ham veriden hesaplanmalıdır. Bu, 13. soruda kaydedilen toplanabilirlik kuralının aynısıdır.
