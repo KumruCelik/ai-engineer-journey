@@ -11,14 +11,14 @@ Durum: [ ] açık · [x] kapalı
 
 - [x] 01 — Hesabı kapalı (`is_active = false`) kullanıcılar kimler?
 - [x] 02 — Ülkesi bilinmeyen kullanıcı sayısı kaç? (NULL sayma tuzağı)
-- [ ] 03 — Liste fiyatı 500'ün üzerindeki ürünler, pahalıdan ucuza.
-- [ ] 04 — Her ürünün marjı ve marj yüzdesi nedir?
-- [ ] 05 — Stoğu tükenmiş ama hâlâ aktif görünen ürünler hangileri?
-- [ ] 06 — Son 30 günde açılan hesap sayısı kaç?
-- [ ] 07 — Siparişler durumlarına göre nasıl dağılıyor?
-- [ ] 08 — Ürünleri fiyat bandına göre sınıflandır (ucuz / orta / pahalı).
-- [ ] 09 — Haftanın hangi gününde en çok sipariş veriliyor?
-- [ ] 10 — Geçerlilik süresi dolmuş kupon kodları hangileri?
+- [x] 03 — Liste fiyatı 500'ün üzerindeki ürünler, pahalıdan ucuza.
+- [x] 04 — Her ürünün marjı ve marj yüzdesi nedir?
+- [x] 05 — Stoğu tükenmiş ama hâlâ aktif görünen ürünler hangileri?
+- [x] 06 — Son 30 günde açılan hesap sayısı kaç?
+- [x] 07 — Siparişler durumlarına göre nasıl dağılıyor?
+- [x] 08 — Ürünleri fiyat bandına göre sınıflandır (ucuz / orta / pahalı).
+- [x] 09 — Haftanın hangi gününde en çok sipariş veriliyor?
+- [x] 10 — Geçerlilik süresi dolmuş kupon kodları hangileri?
 
 ## B. Seviye 2 — birleştirme ve gruplama
 
